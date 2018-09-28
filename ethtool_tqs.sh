@@ -68,12 +68,12 @@ echo "                     TX                                RX"
 while [ 1 ] ; do
 	for ((i = 0; i < $NCORES; i++)); do
 		#TX_{$i}_B=`read_ethx_val $DEV tx${i}_0_packets`
-		TX_P_B[$i]=`read_ethx_val $DEV tx${i}_0_packets`
+		TX_P_B[$i]=`read_ethx_val $DEV tx${i}_packets`
 	done
 sleep $DT
 	for ((i = 0; i < $NCORES; i++)); do
 		#TX_{$i}_A=`read_ethx_val $DEV tx${i}_0_packets`
-		TX_P_A[$i]=`read_ethx_val $DEV tx${i}_0_packets`
+		TX_P_A[$i]=`read_ethx_val $DEV tx${i}_packets`
 	done
 
 	for ((i = 0; i < $NCORES; i++)); do
