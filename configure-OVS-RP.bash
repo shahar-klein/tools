@@ -1,31 +1,62 @@
 #!/bin/bash
 
-GS_PRIV_ADDR=7.7.7.9
-GS_PRIV_MAC=50:6b:4b:fb:ee:ea
-RP_PRIV_LEG_ADDR=7.7.7.5
-RP_PRIV_LEG_MAC=86:46:d4:3d:1e:9a
-RP_PRIV_LEG_DEV=ens5
-RP_PUB_LEG_ADDR=9.9.9.6
-RP_PUB_LEG_MAC=ee:56:dc:c9:8e:4a
-RP_PUB_LEG_DEV=ens6
+GS_PRIV_ADDR=66.66.66.6
+GS_PRIV_MAC=98:03:9b:17:e7:aa
+
+RP_PRIV_LEG_ADDR=66.66.66.3
+RP_PRIV_LEG_MAC=50:6b:4b:c3:a8:e0
+RP_PRIV_LEG_DEV=enp132s0
+
+RP_PUB_LEG_ADDR=44.44.44.3
+RP_PUB_LEG_MAC=50:6b:4b:fb:ee:fa
+RP_PUB_LEG_DEV=enp139s0
+
+GS_PUB_ADDR=44.44.44.4
+GS_PUB_MAC=50:6b:4b:fb:ef:96
+
 RP_PRIV_PATCH_PORT=priv-patch
 RP_PUB_PATCH_PORT=pub-patch
-GS_PUB_ADDR=9.9.9.10
-GS_PUB_MAC=98:03:9b:16:47:16
 BRPUB=brpub
 BRPRIV=brpriv
 
 
+
+RP_PRIV_LEG_ADDR                        RP_PUB_LEG_ADDR
+ +------------+                          +------------+
+ |            |            PUB_PATCH_PORT|            |
+ | BRPRIV     +--------------------------+ BRPUB      |
+ |            |PRIV_PATCH_PORT           |            |
+ |            |                          |            |
+ |            |                          |            |
+ +-----+------+                          +-----+------+
+       |                                       |
+       |                                       |
+       |                                       |
+       |                                       |
+       +                                       +
+RP_PRIV_LEG_DEV                         RP_PUB_LEG_DEV
+
+
+
+
+#vs-vsctl set open . other-config:hw-offload=false
+
 #cleanup
 ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br
 
+systemctl restart openvswitch-switch
+
 ip l set dev $RP_PRIV_LEG_DEV up
 ip l set dev $RP_PUB_LEG_DEV up
+ip addr flush dev $RP_PRIV_LEG_DEV
+ip addr flush dev $RP_PRIV_LEG_DEV
 
 ovs-vsctl add-br $BRPRIV
+ovs-ofctl del-flows $BRPRIV
 ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV
 
 ovs-vsctl add-br $BRPUB
+ovs-ofctl del-flows $BRPUB
 ovs-vsctl add-port $BRPUB $RP_PUB_LEG_DEV
 
 ip a add dev $BRPUB $RP_PUB_LEG_ADDR/24 
@@ -51,13 +82,20 @@ ovs-ofctl dump-ports-desc $BRPUB
 # Add ARP to the priv bridge
 ovs-ofctl add-flow $BRPRIV priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal
 ovs-ofctl add-flow $BRPRIV priority=10,in_port=$BRPRIV,arp,action=normal
+#ovs-ofctl add-flow $BRPRIV priority=10,in_port=$RP_PRIV_LEG_DEV,icmp,action=normal
+#ovs-ofctl add-flow $BRPRIV priority=10,in_port=$BRPRIV,icmp,action=normal
+ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop
+ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop
 ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop
 
 
 # Add ARP to the pub bridge
 ovs-ofctl add-flow $BRPUB priority=10,in_port=$BRPUB,arp,action=normal
 ovs-ofctl add-flow $BRPUB priority=10,in_port=$RP_PUB_LEG_DEV,arp,action=normal
+#ovs-ofctl add-flow $BRPUB priority=10,in_port=$BRPUB,icmp,action=normal
+#ovs-ofctl add-flow $BRPUB priority=10,in_port=$RP_PUB_LEG_DEV,icmp,action=normal
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop
+ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop
 
 # Add the priv side of the flows
