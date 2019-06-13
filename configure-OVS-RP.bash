@@ -11,30 +11,46 @@ RP_PUB_LEG_ADDR=44.44.44.3
 RP_PUB_LEG_MAC=50:6b:4b:fb:ee:fa
 RP_PUB_LEG_DEV=enp139s0
 
-GS_PUB_ADDR=44.44.44.4
-GS_PUB_MAC=50:6b:4b:fb:ef:96
+GC_PUB_ADDR=44.44.44.4
+GC_PUB_MAC=50:6b:4b:fb:ef:96
 
 RP_PRIV_PATCH_PORT=priv-patch
 RP_PUB_PATCH_PORT=pub-patch
 BRPUB=brpub
 BRPRIV=brpriv
 
+GC_PORT_START=7000
+RP_PUB_PORT_START=12000
+RP_PRIV_PORT_START=22000
+GS_PORT_START=17000
+NUM_SESSIONS=10
 
 
-RP_PRIV_LEG_ADDR                        RP_PUB_LEG_ADDR
- +------------+                          +------------+
- |            |            PUB_PATCH_PORT|            |
- | BRPRIV     +--------------------------+ BRPUB      |
- |            |PRIV_PATCH_PORT           |            |
- |            |                          |            |
- |            |                          |            |
- +-----+------+                          +-----+------+
-       |                                       |
-       |                                       |
-       |                                       |
-       |                                       |
-       +                                       +
-RP_PRIV_LEG_DEV                         RP_PUB_LEG_DEV
+#packet: 
+#from GC: GC_PUB_ADDR:GC_PORT->RP_PUB_LEG_ADDR:RP_PUB_PORT
+#DNAT to: GC_PUB_ADDR:GC_PORT->GS_PRIV_ADDR:GS_PORT
+#SNAT to: RP_PRIV_LEG_ADDR:RP_PRIV_PORT->GS_PRIV_ADDR:GS_PORT
+
+#from GS: GS_PRIV_ADDR:GS_PORT->RP_PRIV_LEG_ADDR:RP_PRIV_PORT
+#DNAT to: GS_PRIV_ADDR:GS_PORT->GC_PUB_ADDR:GC_PORT
+#SNAT to: RP_PUB_LEG_ADDR:RP_PUB_PORT->GC_PUB_ADDR:GC_PORT
+
+
+
+#RP_PRIV_LEG_ADDR                        RP_PUB_LEG_ADDR
+# +------------+                          +------------+
+# |            |            PUB_PATCH_PORT|            |
+# | BRPRIV     +--------------------------+ BRPUB      |
+# |            |PRIV_PATCH_PORT           |            |
+# |            |                          |            |
+# |            |                          |            |
+# +-----+------+                          +-----+------+
+#       |                                       |
+#       |                                       |
+#       |                                       |
+#       |                                       |
+#       +                                       +
+#RP_PRIV_LEG_DEV                         RP_PUB_LEG_DEV
 
 
 
@@ -98,16 +114,22 @@ ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop
 
-# Add the priv side of the flows
-ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$RP_PRIV_LEG_ADDR,action=mod_nw_dst=$GS_PUB_ADDR,$RP_PRIV_PATCH_PORT
-# ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,mod_nw_src=$RP_PRIV_LEG_ADDR,dec_ttl,$RP_PRIV_LEG_DEV
-ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,mod_nw_src=$RP_PRIV_LEG_ADDR,$RP_PRIV_LEG_DEV
 
-# Add the pub side of the flows
-ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,ip,nw_dst=$RP_PUB_LEG_ADDR,action=mod_nw_dst=$GS_PRIV_ADDR,$RP_PUB_PATCH_PORT
-# ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GS_PUB_ADDR,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GS_PUB_MAC,dec_ttl,$RP_PUB_LEG_DEV
-ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GS_PUB_ADDR,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GS_PUB_MAC,$RP_PUB_LEG_DEV
+for ((i = 0; i < $NUM_SESSIONS; i++)); do
+	GC_PORT=$(($GC_PORT_START+$i))
+	RP_PUB_PORT=$(($RP_PUB_PORT_START+$i))
+	RP_PRIV_PORT=$(($RP_PRIV_PORT_START+$i))
+	GS_PORT=$(($GS_PORT_START+$i))
+	# Add the priv side of the flows
+	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$RP_PRIV_LEG_ADDR,tp_dst=$RP_PRIV_PORT,action=mod_nw_dst=$GC_PUB_ADDR,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT
+	# ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,mod_nw_src=$RP_PRIV_LEG_ADDR,dec_ttl,$RP_PRIV_LEG_DEV
+	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_ADDR,mod_tp_src=$RP_PRIV_PORT,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,$RP_PRIV_LEG_DEV
 
+	# Add the pub side of the flows
+	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$RP_PUB_LEG_ADDR,tp_dst=$RP_PUB_PORT,action=mod_nw_dst=$GS_PRIV_ADDR,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT
+	# ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,dec_ttl,$RP_PUB_LEG_DEV
+	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_tp_src=$RP_PUB_PORT,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,$RP_PUB_LEG_DEV
+done
 
 echo "$BRPRIV"
 
