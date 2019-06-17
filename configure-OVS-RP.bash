@@ -1,18 +1,18 @@
 #!/bin/bash
 
-GS_PRIV_ADDR=66.66.66.6
-GS_PRIV_MAC=98:03:9b:17:e7:aa
+GS_PRIV_ADDR=7.7.7.9
+GS_PRIV_MAC=50:6b:4b:fb:ee:ea
 
-RP_PRIV_LEG_ADDR=66.66.66.3
-RP_PRIV_LEG_MAC=50:6b:4b:c3:a8:e0
-RP_PRIV_LEG_DEV=enp132s0
+RP_PRIV_LEG_ADDR=7.7.7.5
+RP_PRIV_LEG_MAC=ec:0d:9a:d8:ff:16
+RP_PRIV_LEG_DEV=ens5
 
-RP_PUB_LEG_ADDR=44.44.44.3
-RP_PUB_LEG_MAC=50:6b:4b:fb:ee:fa
-RP_PUB_LEG_DEV=enp139s0
+RP_PUB_LEG_ADDR=9.9.9.6
+RP_PUB_LEG_MAC=ec:0d:9a:d8:ff:17
+RP_PUB_LEG_DEV=ens6
 
-GC_PUB_ADDR=44.44.44.4
-GC_PUB_MAC=50:6b:4b:fb:ef:96
+GC_PUB_ADDR=9.9.9.10
+GC_PUB_MAC=98:03:9b:16:47:16
 
 RP_PRIV_PATCH_PORT=priv-patch
 RP_PUB_PATCH_PORT=pub-patch
@@ -20,10 +20,12 @@ BRPUB=brpub
 BRPRIV=brpriv
 
 GC_PORT_START=7000
-RP_PUB_PORT_START=12000
-RP_PRIV_PORT_START=22000
+RP_PORT_START=22000
 GS_PORT_START=17000
-NUM_SESSIONS=10
+NUM_SESSIONS=1000
+
+# FORWARDING, FORWARDING_RP
+MODE=FORWARDING_RP
 
 
 #packet: 
@@ -114,22 +116,32 @@ ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop
 ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop
 
+# dec_ttl not used currently
 
-for ((i = 0; i < $NUM_SESSIONS; i++)); do
-	GC_PORT=$(($GC_PORT_START+$i))
-	RP_PUB_PORT=$(($RP_PUB_PORT_START+$i))
-	RP_PRIV_PORT=$(($RP_PRIV_PORT_START+$i))
-	GS_PORT=$(($GS_PORT_START+$i))
-	# Add the priv side of the flows
-	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$RP_PRIV_LEG_ADDR,tp_dst=$RP_PRIV_PORT,action=mod_nw_dst=$GC_PUB_ADDR,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT
-	# ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,mod_nw_src=$RP_PRIV_LEG_ADDR,dec_ttl,$RP_PRIV_LEG_DEV
-	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_ADDR,mod_tp_src=$RP_PRIV_PORT,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,$RP_PRIV_LEG_DEV
+# Only forwarding, no NAT'ing.
+if [ $MODE = FORWARDING ]
+then
+	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$GS_PRIV_ADDR,action=$RP_PUB_PATCH_PORT
+	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,$RP_PRIV_LEG_DEV
+	ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$GC_PUB_ADDR,action=$RP_PRIV_PATCH_PORT
+	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,action=mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,$RP_PUB_LEG_DEV
+# Forwarding, and NAT'ing the source address.
+elif [ $MODE = "FORWARDING_RP" ]
+then
+	for ((i = 0; i < $NUM_SESSIONS; i++)); do
+		GC_PORT=$(($GC_PORT_START+$i))
+		RP_PORT=$(($RP_PORT_START+$i))
+		GS_PORT=$(($GS_PORT_START+$i))
+		
+		# Add the pub side of the flows
+		ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$RP_PUB_LEG_ADDR,tp_dst=$RP_PORT,action=mod_nw_dst=$GS_PRIV_ADDR,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT
+		ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_PRIV_ADDR,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_ADDR,mod_tp_src=$RP_PORT,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_PRIV_MAC,$RP_PRIV_LEG_DEV
 
-	# Add the pub side of the flows
-	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$RP_PUB_LEG_ADDR,tp_dst=$RP_PUB_PORT,action=mod_nw_dst=$GS_PRIV_ADDR,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT
-	# ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,dec_ttl,$RP_PUB_LEG_DEV
-	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_tp_src=$RP_PUB_PORT,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,$RP_PUB_LEG_DEV
-done
+		# Add the priv _side of the flows
+		ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$RP_PRIV_LEG_ADDR,tp_dst=$RP_PORT,action=mod_nw_dst=$GC_PUB_ADDR,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT
+		ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$GC_PUB_ADDR,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_ADDR,mod_tp_src=$RP_PORT,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$GC_PUB_MAC,$RP_PUB_LEG_DEV
+	done
+fi
 
 echo "$BRPRIV"
 
