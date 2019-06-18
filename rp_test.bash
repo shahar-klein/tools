@@ -265,7 +265,8 @@ initTest() {
 collectLogs() {
 	base_rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
 	base_tx_bytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
-	base_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+	base_rx_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+	base_tx_dropped=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{print  $2}'`
 	log_duration =$((DURATION/LOG_INTERVAL))
 	for (( dur=1; dur<=$log_duration; dur++ ))
 	do
@@ -277,8 +278,10 @@ collectLogs() {
 		txbytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
 		echo $dur $((txbytes-base_tx_bytes)) >> $LOGDIR/${RP_PUB_LEG_DEV}.tput
 		log "ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep \"rx_out_buffer:\" | awk '{print  $2}"
-		dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-		echo $dur $((dropped-base_dropped)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
+		rx_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+		echo $dur $((rx_dropped-base_rx_dropped)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
+		tx_dropped=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+		echo $dur $((tx_dropped-base_tx_dropped)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
 		# Use NUM_CPUS-1 insted of 7
 		for cpus in {0..7}
 		do
@@ -296,10 +299,11 @@ plotLogs() {
 		set label 1 'a' at graph 0.92,0.9 font ',8'
 		set yrange [0:$THROUGHPUT_YRANGE]
 		plot "$LOGDIR/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
-			"$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "RX DROPPED"
+			"$LOGDIR/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
 		set label 1 'b' at graph 0.92,0.9 font ',8'
 		set yrange [0:$THROUGHPUT_YRANGE]
-		plot "$LOGDIR/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
+		plot "$LOGDIR/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes", \
+			"$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
 		set label 1 'c' at graph 0.92,0.9 font ',8'
 		set yrange [0:$CPU_YRANGE]
 		plot "${LOGDIR}/0.util" using 1:2 with lines title "CPU 0", \
