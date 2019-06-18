@@ -44,13 +44,24 @@ RP_PUB_LEG_DEV=enp7s0
 
 TEST=${1:?test name not set}
 
+# in seconds
+DURATION=60
+NUM_CPU=8
+# in seconds
+LOG_INTERVAL=1
+
+THROUGHPUT_YRANGE=1000000000
+CPU_YRANGE=100
+
 D=`date +%b-%d-%Y`
-LOG=$TEST
-LOG+=_$$
-LOG+=_$D
-echo $LOG
-mkdir $LOG
-LOG=$LOG/$LOG.main.log
+LOGDIR=$TEST
+LOGDIR+=_$$
+LOGDIR+=_$D
+echo $LOGDIR
+mkdir $LOGDIR
+LOG=$LOGDIR/$LOG.main.log
+
+CPUSTART=20
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -67,7 +78,7 @@ logCMD() {
 
 cmdbg() {
 
-	"${$1}" &>/dev/null &disown
+	"{$1}" &>/dev/null &disown
 }
 
 set -u
@@ -227,9 +238,8 @@ cleanup() {
 	#clean all potential datapaths
 	#fwd
 	set +e
-	logCMD "ssh $LOADER ip route add $PUB_NET"
-	logCMD "ssh $INITIATOR ip route add $PRIV_NET"
-	set -e
+	logCMD "ssh $LOADER ip route del $PUB_NET"
+	logCMD "ssh $INITIATOR ip route del $PRIV_NET"
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
@@ -240,6 +250,7 @@ cleanup() {
 
 	ssh $LOADER pkill gonoodle
 	ssh $INITIATOR pkill gonoodle
+	set -e
 }
 
 initTest() {
@@ -251,12 +262,65 @@ initTest() {
 	#add routing rules
 }
 
+collectLogs() {
+	base_rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
+	base_tx_bytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
+	base_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+	log_duration =$((DURATION/LOG_INTERVAL))
+	for (( dur=1; dur<=$log_duration; dur++ ))
+	do
+		sleep $LOG_INTERVAL 
+		log "ethtool -S $RP_PRIV_LEG_DEV | grep \"rx_bytes:\" | awk '{print  $2}"
+		rxbytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
+		echo $dur $((rxbytes-base_rx_bytes)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.tput
+		log "ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep \"tx_bytes:\" | awk '{print  $2}"
+		txbytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
+		echo $dur $((txbytes-base_tx_bytes)) >> $LOGDIR/${RP_PUB_LEG_DEV}.tput
+		log "ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep \"rx_out_buffer:\" | awk '{print  $2}"
+		dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+		echo $dur $((dropped-base_dropped)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
+		# Use NUM_CPUS-1 insted of 7
+		for cpus in {0..7}
+		do
+			cpu=$((CPUSTART+cpus))
+			log "mpstat -P $cpu | tail -1 | tr -s \" \" | cut -d \" \" -f13"
+			idle=`mpstat -P $cpu | tail -1 | tr -s " " | cut -d " " -f13`
+			echo $dur $idle >> $LOGDIR/${cpu}.util
+		done
+	done
+}
+
+plotLogs() {
+	gnuplot -persist <<-EOFMarker
+		set multiplot layout 2,2 rowsfirst
+		set label 1 'a' at graph 0.92,0.9 font ',8'
+		set yrange [0:$THROUGHPUT_YRANGE]
+		plot "$LOGDIR/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
+			"$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "RX DROPPED"
+		set label 1 'b' at graph 0.92,0.9 font ',8'
+		set yrange [0:$THROUGHPUT_YRANGE]
+		plot "$LOGDIR/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
+		set label 1 'c' at graph 0.92,0.9 font ',8'
+		set yrange [0:$CPU_YRANGE]
+		plot "${LOGDIR}/0.util" using 1:2 with lines title "CPU 0", \
+			"${LOGDIR}/1.util" using 1:2 with lines title "CPU 1", \
+			"${LOGDIR}/2.util" using 1:2 with lines title "CPU 2", \
+			"${LOGDIR}/3.util" using 1:2 with lines title "CPU 3", \
+			"${LOGDIR}/4.util" using 1:2 with lines title "CPU 4", \
+			"${LOGDIR}/5.util" using 1:2 with lines title "CPU 5",
+	EOFMarker
+
+}
+
 runTest() {
 	#start loader
-	cmdbg "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C 10 -R 1 -M 1 -b 22m -p 7000 -L :12000 -l 1000 -t 60 &"
+	echo "staring loaded..."
+	cmdbg "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C 10 -R 1 -M 1 -b 22m -p 7000 -L :12000 -l 1000 -t $DURATION &"
 	sleep 1
-	cmdbg "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C 10 -R 10 -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t 1000 &"
-
+	echo "staring initiator..."
+	cmdbg "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C 10 -R 10 -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION &"
+	#collectLogs
+	#plotLogs
 }
 
 ### main ###
