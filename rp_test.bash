@@ -67,6 +67,12 @@ echo $LOGDIR
 mkdir $LOGDIR
 LOG=$LOGDIR/$LOG.main.log
 
+# Options are:
+# IP_FORWARDING_MULTI_STREAM_THROUGHPUT
+# IP_FORWARDING_MULTI_STREAM_PACKET_RATE
+# IP_FORWARDING_MULTI_STREAM_0_LOSS - Default
+
+TEST_PROFILE=IP_FORWARDING_MULTI_STREAM_0_LOSS
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -377,6 +383,12 @@ cleanup
 
 #log_before
 
+# Set profile
+# Check for OFED?
+# ssh $RP mlnx_tune -p $TEST_PROFILE
+
+# log_after
+
 echo "Init test"
 initTest
 echo "Run test"
@@ -384,7 +396,7 @@ runTest
 
 #run metrics
 
-#log_after
+#log after
 
 sleep 100
 
