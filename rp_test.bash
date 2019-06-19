@@ -2,6 +2,7 @@
 
 # TODO
 # log() taking a param as a file
+# Bandwidth stats in the RP instead of ssh
 
 # 
 
@@ -24,8 +25,61 @@
 # finit
 #	take system readings like ethtool, drop count etc
 
+#RP characteristics:
+#-------------------
+#1. MLNX_TUNE
+#       . THRUPUT
+#        . 0Loss
+#        . PKT Rate
+#2. # Channels on the NIC
+#       . 8
+#3. # CPUS per channel / IRQ Affinity
+#       4 CPUs to Rx and the other 4 CPU to Tx
+#       8 CPUs (one for each channel on both NICs)
+#4. CPU pinning or not
+#       . pinned
+#       . left dangling
+#5. toeplitz or xor
+#       . toeplitz
+#6. SRIOV / PT
+#       . SRIOV [ 1 VF each from the 2 PF]
+#       . PT
+#
+#RP Datapath
+#------------
+#1. Linux Forward
+#2. Linux Forward with IPTables/NAT
+#3. OVS Forward (with offload)
+#4. OVS Forward with Statless NAT (with offload)
+#5. OVS Forward without CT. (for now without offload)
+#[3 - 5 : without offloads]
+
+
+
+PT_PCI_DEVICE1_BUS=0xb4
+PT_PCI_DEVICE1_SLOT=0x00
+PT_PCI_DEVICE1_FUNCTION=0x0
+
+PT_PCI_DEVICE2_BUS=0xb4
+PT_PCI_DEVICE2_SLOT=0x00
+PT_PCI_DEVICE2_FUNCTION=0x1
+
+VF_PCI_DEVICE1_BUS=0xb4
+VF_PCI_DEVICE1_SLOT=0x00
+VF_PCI_DEVICE1_FUNCTION=0x1
+
+VF_PCI_DEVICE2_BUS=0xb4
+VF_PCI_DEVICE2_SLOT=0x00
+VF_PCI_DEVICE2_FUNCTION=0x2
+
+
 PRIV_NET="5.5.5.0/24"
 PUB_NET="20.20.20.0/24"
+
+GFN_PUB_PORT_START=8000
+GS_PORT_START=10000
+
+RP_PORT_START=5000
 
 LOADER=10.0.0.147
 LOADER_DEV=ens2
@@ -35,7 +89,10 @@ INITIATOR=10.0.0.148
 INITIATOR_DEV=ens2
 INITIATOR_IP=20.20.20.20
 
-RPVM=rp
+RPVM_PT=rp
+RPVM_SROV=rp_vf
+
+RPVM=$RPVM_PT
 RP=192.168.122.5
 RP_PRIV_LEG_IP=5.5.5.1
 RP_PRIV_LEG_DEV=enp4s0
@@ -51,11 +108,12 @@ TEST=${1:?test name not set}
 
 # in seconds
 DURATION=20
+LOG_DURATION=$((DURATION-5))
 NUM_CPUS=8
 # in seconds
 LOG_INTERVAL=1
 
-CPUSTART=0
+CPUSTART=1
 THROUGHPUT_YRANGE=1000000000
 CPU_YRANGE=100
 BASE_RX_BYTES=0
@@ -79,7 +137,40 @@ P2KILL=""
 # IP_FORWARDING_MULTI_STREAM_PACKET_RATE
 # IP_FORWARDING_MULTI_STREAM_0_LOSS - Default
 
-TEST_PROFILE=IP_FORWARDING_MULTI_STREAM_0_LOSS
+#TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
+TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS"
+
+#TESTS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct"
+TESTS="linux_fwd"
+
+#NIC_MODES="pt sriov"
+NIC_MODES="pt"
+
+#CPU_BINDINGS="dangling pinned"
+CPU_BINDINGS="dangling"
+
+#CPU_AFFINITIES="4 8"
+CPU_AFFINITIES="4"
+
+log() {
+	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
+	echo ${d}:"${@}" >> $LOG
+	
+}
+
+logCMD() {
+	cmd=$@
+	output=`$cmd`
+	log $cmd
+	echo "${output}" >> $LOG
+}
+
+cmdBG() {
+	$@ >/dev/null 2>&1 &
+}
+
+#cmdBG "ssh 10.0.0.147 nohup /root/ws/git/gonoodle/gonoodle -u -s" 
+
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -137,6 +228,35 @@ flush_ip_dev() {
 	log "flush_ip_dev $host $dev"
 }
 
+shutdown_vm() {
+	VM=$1
+
+	log "shutting down $VM"
+
+	virsh shutdown $VM
+}
+
+startup_vm() {
+	VM=$1
+	VMIP=$2
+
+	log "starting $VM"
+
+	virsh start $VM
+	sleep 2
+	local chars=( \| / – \\ )
+	local i=0
+	while ! timeout 0.3 ping -c 1 -n $VMIP  &> /dev/null ; do
+        	        if [ -t 1 ] ; then
+                	        i=$((++i%4));
+                        	echo "         (${chars[$i]})"
+                        	echo -e "\033[2A"
+                	fi
+                	sleep 0.3
+
+	done
+}
+
 reboot_vm() {
 	VM=$1
 	VMIP=$2
@@ -170,7 +290,9 @@ setup() {
 	INITIATOR_DEV_MAC=`get_mac_dev $INITIATOR $INITIATOR_DEV`
 	flush_ip_dev $INITIATOR $INITIATOR_DEV
 	set_ip_dev $INITIATOR $INITIATOR_DEV $INITIATOR_IP
+}
 
+setup_vm() {
 	RP_PRIV_LEG_MAC=`get_mac_dev $RP $RP_PRIV_LEG_DEV`
 	flush_ip_dev $RP $RP_PRIV_LEG_DEV
 	set_ip_dev $RP $RP_PRIV_LEG_DEV $RP_PRIV_LEG_IP
@@ -256,6 +378,7 @@ log_before() {
 cleanup() {
 	#clean all potential datapaths
 	#fwd
+	wait
 	set +e
 	logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
 	logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
@@ -277,7 +400,7 @@ cleanup() {
 initTest() {
 	#git pull?
 	#init the RP depending on the datapath/cores/affinity etc
-	logCMD "ssh $RP sysctl -w net.ipv4.ip_forward=1"
+	#logCMD "ssh $RP sysctl -w net.ipv4.ip_forward=1"
 	logCMD "ssh $LOADER ip route add $PUB_NET via $RP_PRIV_LEG_IP dev $LOADER_DEV"
 	logCMD "ssh $INITIATOR ip route add $PRIV_NET via $RP_PUB_LEG_IP dev $INITIATOR_DEV"
 	#add routing rules
@@ -285,10 +408,10 @@ initTest() {
 
 collectCPULogs() {
 	cpu=$1
-	sleep_duration=$2
+	sleep_duration=$LOG_INTERVAL
 
 	# Idle %age
-	for (( dur=1; dur<=$DURATION; dur++ ))
+	for (( dur=1; dur<=$LOG_DURATION; dur++ ))
 	do
 		output=`mpstat -P $cpu $sleep_duration 1| tail -1 | tr -s " " | cut -d " " -f10,12`
 		idle=`echo $output | cut -d " " -f2`
@@ -299,15 +422,15 @@ collectCPULogs() {
 }	
 
 collectBWLogs() {
-	sleep_duration=$1
+	sleep_duration=$LOG_INTERVAL
 
 	BASE_RX_BYTES=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
 	BASE_TX_BYTES=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
 	BASE_RX_DROPPED=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
 	BASE_TX_DROPPED=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{print  $2}'`
-	for (( dur=1; dur<=$DURATION; dur++ ))
+	for (( dur=1; dur<=$LOG_DURATION; dur++ ))
 	do
-
+		sleep $sleep_duration
 		# RX bytes
 		rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
 		echo $dur $((rx_bytes-BASE_RX_BYTES)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.tput
@@ -324,11 +447,10 @@ collectBWLogs() {
 		tx_dropped=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
 		echo $dur $((tx_dropped-BASE_TX_DROPPED)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
 
-		BASE_RX_BYTES=rx_bytes
-		BASE_TX_BYTES=tx_bytes
-		BASE_RX_DROPPED=rx_dropped
-		BASE_TX_DROPPED=tx_dropped
-		sleep $sleep_duration
+		BASE_RX_BYTES=$rx_bytes
+		BASE_TX_BYTES=$tx_bytes
+		BASE_RX_DROPPED=$rx_dropped
+		BASE_TX_DROPPED=$tx_dropped
 	done
 }
 
@@ -375,61 +497,152 @@ plotLogs() {
 runTest() {
 	#start loader
 	echo "staring loaded..."
-	cmdBG "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p 7000 -L :12000 -l 1000 -t $DURATION"
+	cmdBG "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GS_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	sleep 1
 
 
 	echo "staring initiator..."
-	cmdBG "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION"
+	cmdBG "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 
 }
 
 runMetrics() {
-	sleep_duration=$((DURATION/LOG_INTERVAL))
-	collectBWLogs $sleep_duration &
+	collectBWLogs &
 	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
 		cpu=$((CPUSTART+cpus))
-		collectCPULogs $cpu $sleep_duration &
+		collectCPULogs $cpu &
 		P2KILL+="$! "
 
 	done
 }
 
-killBGThreads() {
-	for p in $P2KILL ; do
-		kill -9 $p
+host_vm_cpu_binding() {
+	cpu_binding=$1
+	if [ $cpu_binding = "dangling" ] ; then
+		return
+	fi
+	for (( cpu=0; cpu<$NUM_CPUS; cpu++ )) 
+	do
+		bindcpu=$((CPU_START+cpu))
+		virsh vcpupin $RPVM $dindcpu
 	done
+}
+
+rp_irq_affinity() {
+	affinity_mode=$1
+	if [ $affinity_mode -eq 4 ] ; then
+		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+		ssh $RP C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+	else
+		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+	fi
+
+}
+
+linux_forward_setup() {
+	ssh $RP sysctl net.ipv4.ip_forward=1
+}
+
+linux_forward_nat_setup() {
+	ssh $RP for i in {0..1000} ; do let dp=${GFN_PUB_PORT_START}+$i; let tdp=${GS_PORT_START}+$i ; iptables -t nat -A PREROUTING -i ens6 -p udp -m udp --dport $dp -j DNAT --to-destination ${LOADER_IP}:$tdp ; done
+	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PUB_LEG_DEV} -j SNAT --to-source ${RP_PUB_LEG_IP}
+	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PRIV_LEG_DEV} -j SNAT --to-source ${RP_PRIV_LEG_IP}
+}
+
+ovs_forward_setup() {
+}
+
+# linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct
+setup_tests() {
+	tests=$1
+	case $tests in 
+		linux_fwd)
+			linux_forward_setup()
+			;;
+		linux_fwd_nat)
+			linux_forward_nat_setup()
+			;;
+		#ovs_fwd)
+		#	ovs_forward_setup()
+		#	;;
+		#ovs_fwd_ct)
+		#	ovs_forward_nat_setup()
+		#	;;
+	esac
+}
+
+killBGThreads() {
+	#for p in $P2KILL ; do
+	#	kill -9 $p
+	#done
+	echo "Waiting..."
+	wait
 
 }
 
 ### main ###
-echo "Setup env"
 setup
+
 echo "Clean Datapath"
 cleanup
 
-
-log_before
-
 # Set profile
 # Check for OFED?
-# ssh $RP mlnx_tune -p $TEST_PROFILE
 
 echo "Init test"
 initTest
 echo "Run test"
-runTest
 
-# runMetrics
+set +e
+shutdown_vm
+set -e
+for mode in $NIC_MODES
+do
+	log_before
+	if [ $mode -eq "pt" ] ; then
+		RPVM=rp
+	else
+		RPVM=rp_vf
+	fi
+	startup_vm
+	RP=`virsh domifaddr $RPVM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
+	for profile in $TEST_PROFILE
+	do
+		startup_vm
+		setup_vm
+		ssh $RP mlnx_tune -p $profile
+		for cpu_binding in $CPU_BINDINGS
+		do
+			host_vm_cpu_binding($cpu_binding)
+			for  cpu_affinity in $CPU_AFFINITIES
+			do
+				rp_irq_affinity($cpu_affinity)
+				do
+					# echo "$profile, $cpu_binding, $cpu_affinity, $mode, $test"
+					for t in $TESTS
+					do
+						setup_test $t
+						run_Test
+						runMetrics
+						cleanup
+						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
+						mkdir -p /tmp/${TEST_LOG_DIR}
+						mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
+						mv /tmp/${TEST_LOG_DIR} $LOGDIR
+					done
+				done
+			done
+		done
+		shutdown_vm
+	done
+	log_after
+	shutdown_vm
+done
 
-sleep $DURATION
 
 #log_before
 
-killBGThreads
 plotLogs
-
-
-
