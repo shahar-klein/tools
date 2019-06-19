@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# TODO
+# log() taking a param as a file
+
 # 
 
 #
@@ -37,6 +40,8 @@ RP=192.168.122.5
 RP_PRIV_LEG_IP=5.5.5.1
 RP_PRIV_LEG_DEV=enp4s0
 
+NUM_SESSIONS=500
+BW_PER_SESSION=20m
 
 RP_PUB_LEG_IP=20.20.20.100
 RP_PUB_LEG_DEV=enp7s0
@@ -45,13 +50,19 @@ RP_PUB_LEG_DEV=enp7s0
 TEST=${1:?test name not set}
 
 # in seconds
-DURATION=60
-NUM_CPU=8
+DURATION=20
+NUM_CPUS=8
 # in seconds
 LOG_INTERVAL=1
 
+CPUSTART=0
 THROUGHPUT_YRANGE=1000000000
 CPU_YRANGE=100
+BASE_RX_BYTES=0
+BASE_TX_BYTES=0
+BASE_RX_DROPPED=0
+BASE_TX_DROPPED=0
+
 
 D=`date +%b-%d-%Y`
 LOGDIR=$TEST
@@ -61,7 +72,12 @@ echo $LOGDIR
 mkdir $LOGDIR
 LOG=$LOGDIR/$LOG.main.log
 
-CPUSTART=20
+# Options are:
+# IP_FORWARDING_MULTI_STREAM_THROUGHPUT
+# IP_FORWARDING_MULTI_STREAM_PACKET_RATE
+# IP_FORWARDING_MULTI_STREAM_0_LOSS - Default
+
+TEST_PROFILE=IP_FORWARDING_MULTI_STREAM_0_LOSS
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -251,6 +267,8 @@ cleanup() {
 
 	ssh $LOADER pkill gonoodle
 	ssh $INITIATOR pkill gonoodle
+
+	pkill mpstat
 	set -e
 }
 
@@ -263,52 +281,91 @@ initTest() {
 	#add routing rules
 }
 
-collectLogs() {
-	base_rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
-	base_tx_bytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
-	base_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-	log_duration =$((DURATION/LOG_INTERVAL))
-	for (( dur=1; dur<=$log_duration; dur++ ))
+collectCPULogs() {
+	cpu=$1
+	sleep_duration=$2
+
+	# Idle %age
+	for (( dur=1; dur<=$DURATION; dur++ ))
 	do
-		sleep $LOG_INTERVAL 
-		log "ethtool -S $RP_PRIV_LEG_DEV | grep \"rx_bytes:\" | awk '{print  $2}"
-		rxbytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
-		echo $dur $((rxbytes-base_rx_bytes)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.tput
-		log "ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep \"tx_bytes:\" | awk '{print  $2}"
-		txbytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
-		echo $dur $((txbytes-base_tx_bytes)) >> $LOGDIR/${RP_PUB_LEG_DEV}.tput
-		log "ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep \"rx_out_buffer:\" | awk '{print  $2}"
-		dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-		echo $dur $((dropped-base_dropped)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
-		# Use NUM_CPUS-1 insted of 7
-		for cpus in {0..7}
-		do
-			cpu=$((CPUSTART+cpus))
-			log "mpstat -P $cpu | tail -1 | tr -s \" \" | cut -d \" \" -f13"
-			idle=`mpstat -P $cpu | tail -1 | tr -s " " | cut -d " " -f13`
-			echo $dur $idle >> $LOGDIR/${cpu}.util
-		done
+		output=`mpstat -P $cpu $sleep_duration 1| tail -1 | tr -s " " | cut -d " " -f10,12`
+		idle=`echo $output | cut -d " " -f2`
+		guest=`echo $output | cut -d " " -f1`
+		echo $dur $idle >> $LOGDIR/${cpu}.idle
+		echo $dur $guest >> $LOGDIR/${cpu}.guest
+	done
+}	
+
+collectBWLogs() {
+	sleep_duration=$1
+
+	BASE_RX_BYTES=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
+	BASE_TX_BYTES=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
+	BASE_RX_DROPPED=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+	BASE_TX_DROPPED=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{print  $2}'`
+	for (( dur=1; dur<=$DURATION; dur++ ))
+	do
+
+		# RX bytes
+		rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
+		echo $dur $((rx_bytes-BASE_RX_BYTES)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.tput
+
+		# TX bytes
+		tx_bytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
+		echo $dur $((tx_bytes-BASE_TX_BYTES)) >> $LOGDIR/${RP_PUB_LEG_DEV}.tput
+
+		# RX buffer overruns
+		rx_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+		echo $dur $((rx_dropped-BASE_RX_DROPPED)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
+
+		# TX drops
+		tx_dropped=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
+		echo $dur $((tx_dropped-BASE_TX_DROPPED)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
+
+		BASE_RX_BYTES=rx_bytes
+		BASE_TX_BYTES=tx_bytes
+		BASE_RX_DROPPED=rx_dropped
+		BASE_TX_DROPPED=tx_dropped
+		sleep $sleep_duration
 	done
 }
 
 plotLogs() {
 	gnuplot -persist <<-EOFMarker
-		set multiplot layout 2,2 rowsfirst
-		set label 1 'a' at graph 0.92,0.9 font ',8'
+		set terminal dumb
+		set multiplot layout 4,2 rowsfirst
 		set yrange [0:$THROUGHPUT_YRANGE]
-		plot "$LOGDIR/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
-			"$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "RX DROPPED"
-		set label 1 'b' at graph 0.92,0.9 font ',8'
-		set yrange [0:$THROUGHPUT_YRANGE]
+
+		plot "$LOGDIR/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes"
+		#plot "$LOGDIR/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
+
 		plot "$LOGDIR/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
-		set label 1 'c' at graph 0.92,0.9 font ',8'
-		set yrange [0:$CPU_YRANGE]
-		plot "${LOGDIR}/0.util" using 1:2 with lines title "CPU 0", \
-			"${LOGDIR}/1.util" using 1:2 with lines title "CPU 1", \
-			"${LOGDIR}/2.util" using 1:2 with lines title "CPU 2", \
-			"${LOGDIR}/3.util" using 1:2 with lines title "CPU 3", \
-			"${LOGDIR}/4.util" using 1:2 with lines title "CPU 4", \
-			"${LOGDIR}/5.util" using 1:2 with lines title "CPU 5",
+		#plot "$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
+
+#		set yrange [0:$CPU_YRANGE]
+#
+#		set label 1 'Idle %' at graph .3,0.5
+#		# User for instead of explicitly going over the list
+#		plot "${LOGDIR}/0.idle" using 1:2 with lines title "CPU 0", \
+#			"${LOGDIR}/1.idle" using 1:2 with lines title "CPU 1", \
+#			"${LOGDIR}/2.idle" using 1:2 with lines title "CPU 2", \
+#			"${LOGDIR}/3.idle" using 1:2 with lines title "CPU 3", \
+#			"${LOGDIR}/4.idle" using 1:2 with lines title "CPU 4", \
+#			"${LOGDIR}/5.idle" using 1:2 with lines title "CPU 5", \
+#			"${LOGDIR}/6.idle" using 1:2 with lines title "CPU 6", \
+#			"${LOGDIR}/7.idle" using 1:2 with lines title "CPU 7"
+#
+#		set label 1 'Guest %' at graph .3,0.5
+#		# User for instead of explicitly going over the list
+#		plot "${LOGDIR}/0.guest" using 1:2 with lines title "CPU 0", \
+#			"${LOGDIR}/1.guest" using 1:2 with lines title "CPU 1", \
+#			"${LOGDIR}/2.guest" using 1:2 with lines title "CPU 2", \
+#			"${LOGDIR}/3.guest" using 1:2 with lines title "CPU 3", \
+#			"${LOGDIR}/4.guest" using 1:2 with lines title "CPU 4", \
+#			"${LOGDIR}/5.guest" using 1:2 with lines title "CPU 5", \
+#			"${LOGDIR}/6.guest" using 1:2 with lines title "CPU 6", \
+#			"${LOGDIR}/7.guest" using 1:2 with lines title "CPU 7"
+	unset multiplot
 	EOFMarker
 
 }
@@ -316,12 +373,24 @@ plotLogs() {
 runTest() {
 	#start loader
 	echo "staring loaded..."
-	cmdBG "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C 10 -R 1 -M 1 -b 22m -p 7000 -L :12000 -l 1000 -t $DURATION"
+	cmdBG "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p 7000 -L :12000 -l 1000 -t $DURATION"
 	sleep 1
+
+
 	echo "staring initiator..."
-	cmdBG "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C 10 -R 10 -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION"
-	#collectLogs
-	#plotLogs
+	cmdBG "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION"
+
+}
+
+runMetrics() {
+	sleep_duration=$((DURATION/LOG_INTERVAL))
+	collectBWLogs $sleep_duration &
+	for ((cpus=0;cpus<NUM_CPUS;cpus++))
+	do
+		cpu=$((CPUSTART+cpus))
+		collectCPULogs $cpu $sleep_duration &
+
+	done
 }
 
 ### main ###
@@ -331,19 +400,21 @@ echo "Clean Datapath"
 cleanup
 
 
-#log_before
+log_before
+
+# Set profile
+# Check for OFED?
+# ssh $RP mlnx_tune -p $TEST_PROFILE
 
 echo "Init test"
 initTest
 echo "Run test"
 runTest
 
-#run metrics
+# runMetrics
 
-#log_after
+sleep $DURATION
 
-sleep 100
+#log_before
 
-
-
-
+plotLogs
