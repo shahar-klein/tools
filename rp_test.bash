@@ -72,6 +72,8 @@ echo $LOGDIR
 mkdir $LOGDIR
 LOG=$LOGDIR/$LOG.main.log
 
+P2KILL=""
+
 # Options are:
 # IP_FORWARDING_MULTI_STREAM_THROUGHPUT
 # IP_FORWARDING_MULTI_STREAM_PACKET_RATE
@@ -385,12 +387,21 @@ runTest() {
 runMetrics() {
 	sleep_duration=$((DURATION/LOG_INTERVAL))
 	collectBWLogs $sleep_duration &
+	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
 		cpu=$((CPUSTART+cpus))
 		collectCPULogs $cpu $sleep_duration &
+		P2KILL+="$! "
 
 	done
+}
+
+killBGThreads() {
+	for p in $P2KILL ; do
+		kill -9 $p
+	done
+
 }
 
 ### main ###
@@ -417,4 +428,8 @@ sleep $DURATION
 
 #log_before
 
+killBGThreads
 plotLogs
+
+
+
