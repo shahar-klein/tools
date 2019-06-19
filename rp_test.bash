@@ -76,10 +76,11 @@ logCMD() {
 	echo "${output}" >> $LOG
 }
 
-cmdbg() {
-
-	"{$1}" &>/dev/null &disown
+cmdBG() {
+	$@ >/dev/null 2>&1 &
 }
+
+#cmdBG "ssh 10.0.0.147 nohup /root/ws/git/gonoodle/gonoodle -u -s" 
 
 set -u
 set -e
@@ -238,8 +239,8 @@ cleanup() {
 	#clean all potential datapaths
 	#fwd
 	set +e
-	logCMD "ssh $LOADER ip route del $PUB_NET"
-	logCMD "ssh $INITIATOR ip route del $PRIV_NET"
+	logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
+	logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
@@ -319,21 +320,31 @@ plotLogs() {
 runTest() {
 	#start loader
 	echo "staring loaded..."
-	cmdbg "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C 10 -R 1 -M 1 -b 22m -p 7000 -L :12000 -l 1000 -t $DURATION &"
+	cmdBG "ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C 10 -R 1 -M 1 -b 22m -p 7000 -L :12000 -l 1000 -t $DURATION"
 	sleep 1
 	echo "staring initiator..."
-	cmdbg "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C 10 -R 10 -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION &"
+	cmdBG "ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C 10 -R 10 -M 1 -b 1k -p 12000 -L :7000 -l 1000 -t $DURATION"
 	#collectLogs
 	#plotLogs
 }
 
 ### main ###
-
+echo "Setup env"
 setup
+echo "Clean Datapath"
 cleanup
+
+
 #log_before
+
+echo "Init test"
 initTest
+echo "Run test"
 runTest
+
+#run metrics
+
+#log_after
 
 sleep 100
 
