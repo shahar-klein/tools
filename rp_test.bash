@@ -146,7 +146,7 @@ P2KILL=""
 TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS"
 
 #TESTS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct"
-TESTS="ovs_fwd_nat"
+TESTS="ovs_fwd_ct"
 
 #NIC_MODES="pt sriov"
 NIC_MODES="pt"
@@ -645,8 +645,7 @@ ovs_forward_setup() {
 }
 
 ovs_forward_nat_setup() {
-	setup_vm_ovs "no"
-	echo "Done setting up OVS"
+	setup_vm_ovs "yes"
 
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
@@ -668,6 +667,37 @@ ovs_forward_nat_setup() {
 
 }
 
+ovs_forward_ct_setup() {
+	setup_vm_ovs "no"
+
+	# XXX It'll take a long time to add these flows via ssh!
+	for ((i = 0; i < $NUM_SESSIONS; i++)); do
+		GC_PORT=$((GFN_PUB_PORT_START+i))
+		RP_PORT=$((RP_PORT_START+i))
+		GS_PORT=$((GS_PORT_START+i))
+
+		# Add the pub side of the flows
+		ssh $RP "ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,action=ct\(zone=10,nat,table=11\)"
+		ssh $RP "ovs-ofctl add-flow $BRPUB table=11,priority=100,in_port=$RP_PUB_LEG_DEV,udp,tp_dst=$RP_PORT,ct_state=+trk+new,action=ct\(commit,zone=10,nat\(dst=$LOADER_IP:$GS_PORT\)\),$RP_PUB_PATCH_PORT"
+		ssh $RP "ovs-ofctl add-flow $BRPUB table=11,priority=100,in_port=$RP_PUB_LEG_DEV,udp,tp_dst=$RP_PORT,ct_state=+trk+est,action=ct\(zone=10,nat\),$RP_PUB_PATCH_PORT"
+		ssh $RP "ovs-ofctl add-flow $BRPRIV in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct\(zone=12,nat,table=13\)"
+
+		ssh $RP "ovs-ofctl add-flow $BRPRIV table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+new,action=ct\(commit,zone=12,nat\(src=$RP_PRIV_LEG_IP:$RP_PORT\)\),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV"
+
+		ssh $RP "ovs-ofctl add-flow $BRPRIV table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+est,action=ct\(zone=12,nat\),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV"
+
+
+		# Add the priv _side of the flows
+		ssh $RP "ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct\(zone=12,nat,table=14\)"
+		ssh $RP "ovs-ofctl add-flow $BRPRIV table=14,priority=100,in_port=$RP_PRIV_LEG_DEV,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT"
+		ssh $RP "ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct\(zone=10,nat,table=15\)"
+		ssh $RP "ovs-ofctl add-flow $BRPUB table=15,priority=100,in_port=$RP_PUB_PATCH_PORT,udp,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,$RP_PUB_LEG_DEV"
+	done
+
+	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
+	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${RP_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
+
+}
 
 
 # linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct
@@ -687,9 +717,9 @@ setup_tests() {
 		ovs_fwd_nat)
 			ovs_forward_nat_setup
 			;;
-		#ovs_fwd_ct)
-		#	ovs_forward_ct_setup
-		#	;;
+		ovs_fwd_ct)
+			ovs_forward_ct_setup
+			;;
 	esac
 }
 
