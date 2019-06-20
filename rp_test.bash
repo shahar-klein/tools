@@ -512,7 +512,7 @@ collectCPULogs() {
 
 collectBWLogs() {
 
-	ssh $RP $TOOLS/collect_ethtool_stats.bash $DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
 
 
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput
