@@ -1,12 +1,16 @@
 #!/bin/bash
 set -u
 
-sleep_duration=$1
-RP_PRIV_LEG_DEV=$2
-RP_PUB_LEG_DEV=$3
-RESULTS_LOG_DIR=$4
+DURATION=$1
+sleep_duration=$2
+RP_PRIV_LEG_DEV=$3
+RP_PUB_LEG_DEV=$4
+RESULTS_LOG_DIR=$5
 
-rm -rf $RESULTS_LOG_DIR/*
+rm -f $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV}.tput
+rm -f $RESULTS_LOG_DIR/${RP_PUB_LEG_DEV}.tput
+rm -f $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV}.dropped
+rm -f $RESULTS_LOG_DIR/${RP_PUB_LEG_DEV}.dropped
 
 
 BASE_RX_BYTES=`ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
