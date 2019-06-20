@@ -762,9 +762,7 @@ do
 					setup_tests $t
 					echo "Run test"
 					runTest
-					echo "Done Running test"
 					runMetrics
-					echo "Done Collecting runMetrics"
 					cleanup
 					TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
 					mkdir -p /tmp/${TEST_LOG_DIR}
