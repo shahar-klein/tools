@@ -109,6 +109,7 @@ RP_PRIV_PATCH_PORT=priv-patch
 RP_PUB_PATCH_PORT=pub-patch
 
 TEST=${1:?test name not set}
+TOOLS=/git/tools
 
 # in seconds
 DURATION=300
@@ -510,36 +511,15 @@ collectCPULogs() {
 }	
 
 collectBWLogs() {
-	sleep_duration=$LOG_INTERVAL
 
-	BASE_RX_BYTES=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
-	BASE_TX_BYTES=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
-	BASE_RX_DROPPED=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-	BASE_TX_DROPPED=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{print  $2}'`
-	for (( dur=1; dur<=$LOG_DURATION; dur++ ))
-	do
-		sleep $sleep_duration
-		# RX bytes
-		rx_bytes=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
-		echo $dur $((rx_bytes-BASE_RX_BYTES)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.tput
+	ssh $RP $TOOLS/collect_ethtool_stats.bash $DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
 
-		# TX bytes
-		tx_bytes=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "tx_bytes:" | awk '{print  $2}'`
-		echo $dur $((tx_bytes-BASE_TX_BYTES)) >> $LOGDIR/${RP_PUB_LEG_DEV}.tput
 
-		# RX buffer overruns
-		rx_dropped=`ssh $RP ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-		echo $dur $((rx_dropped-BASE_RX_DROPPED)) >> $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped
 
-		# TX drops
-		tx_dropped=`ssh $RP ethtool -S $RP_PUB_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
-		echo $dur $((tx_dropped-BASE_TX_DROPPED)) >> $LOGDIR/${RP_PUB_LEG_DEV}.dropped
-
-		BASE_RX_BYTES=$rx_bytes
-		BASE_TX_BYTES=$tx_bytes
-		BASE_RX_DROPPED=$rx_dropped
-		BASE_TX_DROPPED=$tx_dropped
-	done
 }
 
 plotLogs() {
