@@ -20,6 +20,7 @@ BASE_TX_DROPPED=`ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{p
 for (( dur=1; dur<=$DURATION; dur++ ))
 do
 
+        sleep $sleep_duration
         # RX bytes
         rx_bytes=`ethtool -S $RP_PRIV_LEG_DEV | grep "rx_bytes:" | awk '{print  $2}'`
         echo $dur $((rx_bytes-BASE_RX_BYTES)) >> $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV}.tput
@@ -40,5 +41,4 @@ do
         BASE_TX_BYTES=$tx_bytes
         BASE_RX_DROPPED=$rx_dropped
         BASE_TX_DROPPED=$tx_dropped
-        sleep $sleep_duration
 done
