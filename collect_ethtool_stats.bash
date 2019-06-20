@@ -36,9 +36,9 @@ do
         tx_dropped=`ethtool -S $RP_PUB_LEG_DEV | grep "rx_out_buffer:" | awk '{print  $2}'`
         echo $dur $((tx_dropped-BASE_TX_DROPPED)) >> $RESULTS_LOG_DIR/${RP_PUB_LEG_DEV}.dropped
 
-        BASE_RX_BYTES=rx_bytes
-        BASE_TX_BYTES=tx_bytes
-        BASE_RX_DROPPED=rx_dropped
-        BASE_TX_DROPPED=tx_dropped
+        BASE_RX_BYTES=$rx_bytes
+        BASE_TX_BYTES=$tx_bytes
+        BASE_RX_DROPPED=$rx_dropped
+        BASE_TX_DROPPED=$tx_dropped
         sleep $sleep_duration
 done
