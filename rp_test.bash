@@ -5,7 +5,7 @@ wait
 # log() taking a param as a file
 # Bandwidth stats in the RP instead of ssh
 # script for setting up OVS NAT rules instead of sshing 
-# 
+# suppress output from mlnx_tune and copy over the log file from rp
 
 #
 # cleanup
