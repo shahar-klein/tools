@@ -109,7 +109,7 @@ RP_PRIV_PATCH_PORT=priv-patch
 RP_PUB_PATCH_PORT=pub-patch
 
 TEST=${1:?test name not set}
-TOOLS=/git/tools
+TOOLS=/root/git/tools
 
 # in seconds
 DURATION=300
@@ -503,9 +503,10 @@ collectCPULogs() {
 	for (( dur=1; dur<=$LOG_DURATION; dur++ ))
 	do
 		output=`mpstat -P $cpu $sleep_duration 1| tail -1 | tr -s " " | cut -d " " -f10,12`
-		idle=`echo $output | cut -d " " -f2`
+		idle=`echo $output | cut -d " " -f2 | cut -d"." -f1`
 		guest=`echo $output | cut -d " " -f1`
-		echo $dur $idle >> $LOGDIR/${cpu}.idle
+		util=$((100-idle))
+		echo $dur $util >> $LOGDIR/${cpu}.util
 		echo $dur $guest >> $LOGDIR/${cpu}.guest
 	done
 }	
@@ -538,14 +539,14 @@ plotLogs() {
 #
 #		set label 1 'Idle %' at graph .3,0.5
 #		# User for instead of explicitly going over the list
-#		plot "${LOGDIR}/0.idle" using 1:2 with lines title "CPU 0", \
-#			"${LOGDIR}/1.idle" using 1:2 with lines title "CPU 1", \
-#			"${LOGDIR}/2.idle" using 1:2 with lines title "CPU 2", \
-#			"${LOGDIR}/3.idle" using 1:2 with lines title "CPU 3", \
-#			"${LOGDIR}/4.idle" using 1:2 with lines title "CPU 4", \
-#			"${LOGDIR}/5.idle" using 1:2 with lines title "CPU 5", \
-#			"${LOGDIR}/6.idle" using 1:2 with lines title "CPU 6", \
-#			"${LOGDIR}/7.idle" using 1:2 with lines title "CPU 7"
+#		plot "${LOGDIR}/0.util" using 1:2 with lines title "CPU 0", \
+#			"${LOGDIR}/1.util" using 1:2 with lines title "CPU 1", \
+#			"${LOGDIR}/2.util" using 1:2 with lines title "CPU 2", \
+#			"${LOGDIR}/3.util" using 1:2 with lines title "CPU 3", \
+#			"${LOGDIR}/4.util" using 1:2 with lines title "CPU 4", \
+#			"${LOGDIR}/5.util" using 1:2 with lines title "CPU 5", \
+#			"${LOGDIR}/6.util" using 1:2 with lines title "CPU 6", \
+#			"${LOGDIR}/7.util" using 1:2 with lines title "CPU 7"
 #
 #		set label 1 'Guest %' at graph .3,0.5
 #		# User for instead of explicitly going over the list
@@ -575,7 +576,7 @@ runTest() {
 }
 
 runMetrics() {
-	# collectBWLogs &
+	collectBWLogs &
 	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
