@@ -64,6 +64,7 @@ wait
 RESULTSDIR=${1:?result location not set}
 # Test number for the test to run, from rp_test.list
 TEST_TO_RUN=$2
+TEST_TO_PLOT=$2
 # read the config file
 if test -f rp_test.config ; then
 	. rp_test.config
@@ -427,41 +428,46 @@ collectBWLogs() {
 }
 
 plotLogs() {
+	testdir=$1
+	if [ -z GNUPLOT_TERMINAL ]
+	then
+		GNUPLOT_TERMINAL=qt
+	fi
 	gnuplot -persist <<-EOFMarker
 		set terminal $GNUPLOT_TERMINAL
 		set multiplot layout 4,2 rowsfirst
 		set yrange [0:$THROUGHPUT_YRANGE]
 
-		plot "$LOGDIR/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes"
-		#plot "$LOGDIR/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
+		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes"
+		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
 
-		plot "$LOGDIR/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
-		#plot "$LOGDIR/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
+		plot "$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
+		plot "$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
 
-#		set yrange [0:$CPU_YRANGE]
-#
-#		set label 1 'Idle %' at graph .3,0.5
-#		# User for instead of explicitly going over the list
-#		plot "${LOGDIR}/0.util" using 1:2 with lines title "CPU 0", \
-#			"${LOGDIR}/1.util" using 1:2 with lines title "CPU 1", \
-#			"${LOGDIR}/2.util" using 1:2 with lines title "CPU 2", \
-#			"${LOGDIR}/3.util" using 1:2 with lines title "CPU 3", \
-#			"${LOGDIR}/4.util" using 1:2 with lines title "CPU 4", \
-#			"${LOGDIR}/5.util" using 1:2 with lines title "CPU 5", \
-#			"${LOGDIR}/6.util" using 1:2 with lines title "CPU 6", \
-#			"${LOGDIR}/7.util" using 1:2 with lines title "CPU 7"
-#
-#		set label 1 'Guest %' at graph .3,0.5
-#		# User for instead of explicitly going over the list
-#		plot "${LOGDIR}/0.guest" using 1:2 with lines title "CPU 0", \
-#			"${LOGDIR}/1.guest" using 1:2 with lines title "CPU 1", \
-#			"${LOGDIR}/2.guest" using 1:2 with lines title "CPU 2", \
-#			"${LOGDIR}/3.guest" using 1:2 with lines title "CPU 3", \
-#			"${LOGDIR}/4.guest" using 1:2 with lines title "CPU 4", \
-#			"${LOGDIR}/5.guest" using 1:2 with lines title "CPU 5", \
-#			"${LOGDIR}/6.guest" using 1:2 with lines title "CPU 6", \
-#			"${LOGDIR}/7.guest" using 1:2 with lines title "CPU 7"
-	unset multiplot
+		set yrange [0:$CPU_YRANGE]
+
+		set label 1 'Idle %' at graph .3,0.5
+		# User for instead of explicitly going over the list
+		plot "${testdir}/0.util" using 1:2 with lines title "CPU 0", \
+			"${testdir}/1.util" using 1:2 with lines title "CPU 1", \
+			"${testdir}/2.util" using 1:2 with lines title "CPU 2", \
+			"${testdir}/3.util" using 1:2 with lines title "CPU 3", \
+			"${testdir}/4.util" using 1:2 with lines title "CPU 4", \
+			"${testdir}/5.util" using 1:2 with lines title "CPU 5", \
+			"${testdir}/6.util" using 1:2 with lines title "CPU 6", \
+			"${testdir}/7.util" using 1:2 with lines title "CPU 7"
+
+		set label 1 'Guest %' at graph .3,0.5
+		# User for instead of explicitly going over the list
+		plot "${testdir}/0.guest" using 1:2 with lines title "CPU 0", \
+			"${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
+			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
+			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
+			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
+			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
+			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
+			"${testdir}/7.guest" using 1:2 with lines title "CPU 7"
+		unset multiplot
 	EOFMarker
 
 }
@@ -510,11 +516,11 @@ rp_irq_affinity() {
 	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
 	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
 	if [ $affinity_mode -eq 4 ] ; then
-		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
-		ssh $RP C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
 	else
-		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
-		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
 	fi
 
 }
@@ -614,7 +620,20 @@ killBGThreads() {
 #fi
 
 ### main ###
-if [ $JUST_DISPLAY_TESTS != "yes" ]
+
+if [ -n $JUST_DISPLAY_TESTS -o -n $JUST_PLOT_RESULTS -a $DONT_RUN_TESTS != "yes" ]
+then
+	echo "DONT_RUN_TESTS needs to be \"yes\" for JUST_DISPLAY_TESTS or JUST_PLOT_RESULTS"
+	exit
+fi
+
+if [ $DONT_RUN_TESTS = "yes" -a -z $JUST_DISPLAY_TESTS -a -z $DONT_RUN_TESTS ]
+then
+	echo "JUST_DISPLAY_TESTS or JUST_PLOT_RESULTS needs to be \"yes\" if DONT_RUN_TESTS is \"yes\""
+	exit
+fi
+
+if [ $DONT_RUN_TESTS = "yes" ]
 then
 	setup
 
@@ -626,18 +645,27 @@ then
 
 	echo "Init test"
 	initTest
-else
+fi
+
+if [ $JUST_DISPLAY_TESTS = "yes" ]
 	echo "# DO NOT hand edit. This is generated by $0 with the JUST_DISPLAY_TESTS "
 	echo "# set in the config"
 	echo 
 fi
+
+if [ $JUST_PLOT_RESULTS = "yes" -a -z $TEST_TO_PLOT ]
+then
+	echo "Need to specify Test # to plot"
+	exit
+fi
+
 # XXX Add a loop for number of sessions : 500, 1000
 # XXX Burst too.
 # XXX H/A
 disp_count=1 
 for mode in $NIC_MODES
 do
-	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	if [ $DONT_RUN_TESTS = "yes" ]
 	then
 		if [ $mode = "pt" ] ; then
 			RPVM=rp
@@ -652,7 +680,7 @@ do
 	fi
 	for profile in $TEST_PROFILE
 	do
-		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		if [ $DONT_RUN_TESTS = "yes" ]
 		then
 			startup_vm
 			log_before
@@ -663,13 +691,13 @@ do
 		fi
 		for cpu_binding in $CPU_BINDINGS
 		do
-			if [ $JUST_DISPLAY_TESTS != "yes" ]
+			if [ $DONT_RUN_TESTS = "yes" ]
 			then
 				host_vm_cpu_binding $cpu_binding
 			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
-				if [ $JUST_DISPLAY_TESTS != "yes" ]
+				if [ $DONT_RUN_TESTS = "yes" ]
 				then
 					rp_irq_affinity $cpu_affinity
 				fi
@@ -679,6 +707,15 @@ do
 					if [ $JUST_DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+					elif [ $JUST_PLOT_RESULTS = "yes" ]
+					then
+						if [ $TEST_TO_PLOT != $disp_count ]
+						then
+							disp_count=$((disp_count+1))
+							continue
+						fi
+						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
+						plotLogs $TEST_LOG_DIR
 					else
 						if [ -n $TEST_TO_RUN -a $TEST_TO_RUN != $disp_count ]
 						then
@@ -699,12 +736,12 @@ do
 				done
 			done
 		done
-		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		if [ $DONT_RUN_TESTS = "yes" ]
 		then
 			shutdown_vm
 		fi
 	done
-	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	if [ $DONT_RUN_TESTS = "yes" ]
 	then
 		# log_after
 		shutdown_vm
@@ -712,8 +749,3 @@ do
 done
 
 #log_before
-
-if [ $JUST_DISPLAY_TESTS != "yes" ]
-then
-	plotLogs
-fi
