@@ -170,6 +170,8 @@ INITIATOR_DEV_MAC=
 RP_PRIV_LEG_MAC=
 RP_PUB_LEG_MAC=
 
+JUST_DISPLAY_TESTS=yes
+
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
 	echo ${d}:"${@}" >> $LOG
@@ -743,61 +745,91 @@ killBGThreads() {
 }
 
 ### main ###
-setup
+if [ $JUST_DISPLAY_TESTS != "yes" ]
+then
+	setup
 
-echo "Clean Datapath"
-cleanup
+	echo "Clean Datapath"
+	cleanup
 
-# Set profile
-# Check for OFED?
+	# Set profile
+	# Check for OFED?
 
-echo "Init test"
-initTest
-
+	echo "Init test"
+	initTest
+fi
 # XXX Add a loop for number of sessions : 500, 1000
 # XXX Burst too.
 # XXX H/A
 for mode in $NIC_MODES
 do
-	if [ $mode = "pt" ] ; then
-		RPVM=rp
-	else
-		RPVM=rp_vf
+	disp_count=1 
+	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	then
+		if [ $mode = "pt" ] ; then
+			RPVM=rp
+		else
+			RPVM=rp_vf
+		fi
+		shutdown_vm
 	fi
-	shutdown_vm
 	for profile in $TEST_PROFILE
 	do
-		startup_vm
-		log_before
-		setup_vm
-		ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log
+		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		then
+			startup_vm
+			log_before
+			setup_vm
+			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log
+		fi
 		for cpu_binding in $CPU_BINDINGS
 		do
-			host_vm_cpu_binding $cpu_binding
+			if [ $JUST_DISPLAY_TESTS != "yes" ]
+			then
+				host_vm_cpu_binding $cpu_binding
+			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
-				rp_irq_affinity $cpu_affinity
-				# echo "$profile, $cpu_binding, $cpu_affinity, $mode, $test"
+				if [ $JUST_DISPLAY_TESTS != "yes" ]
+				then
+					rp_irq_affinity $cpu_affinity
+				fi
+				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
-					setup_tests $t
-					echo "Run test"
-					runTest
-					runMetrics
-					cleanup
-					TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-					mkdir -p /tmp/${TEST_LOG_DIR}
-					mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
-					mv /tmp/${TEST_LOG_DIR} $LOGDIR
+					if [ $JUST_DISPLAY_TESTS = "yes" ]
+					then
+						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						disp_count=$((disp_count+1))
+					else
+						setup_tests $t
+						echo "Running test"
+						#runTest
+						#runMetrics
+						#cleanup
+						#TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
+						#mkdir -p /tmp/${TEST_LOG_DIR}
+						#mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
+						#mv /tmp/${TEST_LOG_DIR} $LOGDIR
+					fi
 				done
 			done
 		done
-		shutdown_vm
+		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		then
+			shutdown_vm
+		fi
 	done
-	# log_after
-	shutdown_vm
+	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	then
+		# log_after
+		shutdown_vm
+	fi
 done
 
 #log_before
 
-plotLogs
+if [ $JUST_DISPLAY_TESTS != "yes" ]
+then
+	plotLogs
+fi
