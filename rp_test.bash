@@ -7,6 +7,8 @@ wait
 # script for setting up OVS NAT rules instead of sshing 
 # suppress output from mlnx_tune and copy over the log file from rp
 # OVS add rules scalabilty
+# Check config for BM NIC_MODES
+# Set channel in rp_irq_affinity before setting affinity
 
 #
 # cleanup
@@ -149,10 +151,10 @@ P2KILL=""
 #TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
 TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS"
 
-#TESTS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct"
+#TESTS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload"
 TESTS="ovs_fwd_ct"
 
-#NIC_MODES="pt sriov"
+#NIC_MODES="pt sriov bm"
 NIC_MODES="pt"
 
 #CPU_BINDINGS="dangling pinned"
@@ -623,10 +625,6 @@ linux_forward_setup() {
 	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
 }
 
-#GFN_PUB_PORT_START=8000
-#GS_PORT_START=10000
-#RP_PORT_START=5000
-
 linux_forward_nat_setup() {
 	nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
 	ssh $RP $nat_cmd
@@ -637,8 +635,6 @@ linux_forward_nat_setup() {
 }
 
 ovs_forward_setup() {
-	setup_vm_ovs "no"
-
 	# Add forwarding rules
 	ssh $RP ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$LOADER_IP,action=$RP_PUB_PATCH_PORT
 	ssh $RP ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV
@@ -649,8 +645,6 @@ ovs_forward_setup() {
 }
 
 ovs_forward_nat_setup() {
-	setup_vm_ovs "yes"
-
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
 		GC_PORT=$((GFN_PUB_PORT_START+i))
@@ -671,7 +665,6 @@ ovs_forward_nat_setup() {
 }
 
 ovs_forward_ct_setup() {
-	setup_vm_ovs "no"
 
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
@@ -714,12 +707,27 @@ setup_tests() {
 			linux_forward_nat_setup
 			;;
 		ovs_fwd)
+			setup_vm_ovs "no"
+			ovs_forward_setup
+			;;
+		ovs_fwd_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_setup
 			;;
 		ovs_fwd_nat)
+			setup_vm_ovs "no"
+			ovs_forward_nat_setup
+			;;
+		ovs_fwd_nat_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_ct)
+			setup_vm_ovs "no"
+			ovs_forward_ct_setup
+			;;
+		ovs_fwd_ct_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_ct_setup
 			;;
 	esac
