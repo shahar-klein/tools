@@ -7,8 +7,12 @@ wait
 # script for setting up OVS NAT rules instead of sshing 
 # suppress output from mlnx_tune and copy over the log file from rp
 # OVS add rules scalabilty
+# Check config for BM NIC_MODES
+# Set channel in rp_irq_affinity before setting affinity
+# For bonding add additional interfaces to the script
+# Take the big loop outside as a separate script; this should run only a specific test
 
-#
+
 # cleanup
 #	clean loader(Game seat), initiator(Game console), rp ip addresses from the relevant devs
 #	restart rp
@@ -46,7 +50,8 @@ wait
 #6. SRIOV / PT
 #       . SRIOV [ 1 VF each from the 2 PF]
 #       . PT
-#
+#	. BM
+
 #RP Datapath
 #------------
 #1. Linux Forward
@@ -56,117 +61,16 @@ wait
 #5. OVS Forward without CT. (for now without offload)
 #[3 - 5 : without offloads]
 
+RESULTSDIR=${1:?result location not set}
+# Test number for the test to run, from rp_test.list
+TEST_TO_RUN=$2
+# read the config file
+if test -f rp_test.config ; then
+	. rp_test.config
+else
+	echo "Config file missing ... exiting"
+fi
 
-PT_PCI_DEVICE1_BUS=0xb4
-PT_PCI_DEVICE1_SLOT=0x00
-PT_PCI_DEVICE1_FUNCTION=0x0
-
-PT_PCI_DEVICE2_BUS=0xb4
-PT_PCI_DEVICE2_SLOT=0x00
-PT_PCI_DEVICE2_FUNCTION=0x1
-
-VF_PCI_DEVICE1_BUS=0xb4
-VF_PCI_DEVICE1_SLOT=0x00
-VF_PCI_DEVICE1_FUNCTION=0x1
-
-VF_PCI_DEVICE2_BUS=0xb4
-VF_PCI_DEVICE2_SLOT=0x00
-VF_PCI_DEVICE2_FUNCTION=0x2
-
-
-PRIV_NET="5.5.5.0/24"
-PUB_NET="30.30.30.0/24"
-
-GFN_PUB_PORT_START=8000
-GS_PORT_START=10000
-
-RP_PORT_START=5000
-
-LOADER=10.0.0.147
-LOADER_DEV=ens2
-LOADER_IP=5.5.5.5
-
-INITIATOR=10.0.0.148
-INITIATOR_DEV=ens2
-INITIATOR_IP=30.30.30.20
-
-RPVM_PT=rp
-RPVM_SROV=rp_vf
-
-RPVM=$RPVM_PT
-RP=192.168.122.5
-RP_PRIV_LEG_IP=5.5.5.1
-RP_PRIV_LEG_DEV=enp4s0
-
-NUM_SESSIONS=5
-BW_PER_SESSION=20m
-
-RP_PUB_LEG_IP=30.30.30.100
-RP_PUB_LEG_DEV=enp7s0
-
-BRPUB=brpub
-BRPRIV=brpriv
-RP_PRIV_PATCH_PORT=priv-patch
-RP_PUB_PATCH_PORT=pub-patch
-
-TEST=${1:?test name not set}
-TOOLS=/root/git/tools
-
-# in seconds
-DURATION=300
-LOG_DURATION=$((DURATION-5))
-NUM_CPUS=8
-# in seconds
-LOG_INTERVAL=1
-
-CPUSTART=1
-THROUGHPUT_YRANGE=1000000000
-CPU_YRANGE=100
-BASE_RX_BYTES=0
-BASE_TX_BYTES=0
-BASE_RX_DROPPED=0
-BASE_TX_DROPPED=0
-
-
-D=`date +%b-%d-%Y`
-LOGDIR=$TEST
-LOGDIR+=_$$
-LOGDIR+=_$D
-echo $LOGDIR
-mkdir $LOGDIR
-LOG=$LOGDIR/$LOG.main.log
-
-# or qt if we can display the plots
-GNUPLOT_TERMINAL=dumb
-
-P2KILL=""
-
-# Options are:
-# IP_FORWARDING_MULTI_STREAM_THROUGHPUT
-# IP_FORWARDING_MULTI_STREAM_PACKET_RATE
-# IP_FORWARDING_MULTI_STREAM_0_LOSS - Default
-
-#TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
-TEST_PROFILE="IP_FORWARDING_MULTI_STREAM_0_LOSS"
-
-#TESTS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct"
-TESTS="ovs_fwd_ct"
-
-#NIC_MODES="pt sriov"
-NIC_MODES="pt"
-
-#CPU_BINDINGS="dangling pinned"
-CPU_BINDINGS="dangling"
-
-#CPU_AFFINITIES="4 8"
-CPU_AFFINITIES="4"
-
-LOADER_CMD=
-INITIATOR_CMD=
-LOADER_DEV_MAC=
-INITIATOR_DEV_MAC=
-RP_PRIV_LEG_MAC=
-RP_PUB_LEG_MAC=
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -184,9 +88,6 @@ logCMD() {
 cmdBG() {
 	$@ >/dev/null 2>&1 &
 }
-
-#cmdBG "ssh 10.0.0.147 nohup /root/ws/git/gonoodle/gonoodle -u -s" 
-
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -210,7 +111,7 @@ cmdBG() {
 set -u
 set -e
 
-log "`date`  ##Start $TEST##"
+log "`date`  ##Start $RESULTSDIR##"
 log "==================================="
 log " "
 log " "
@@ -298,8 +199,6 @@ reboot_vm() {
 
 	done
 }
-
-
 
 setup() {
 	#reboot_vm $RPVM $RP
@@ -607,6 +506,9 @@ host_vm_cpu_binding() {
 
 rp_irq_affinity() {
 	affinity_mode=$1
+	# Set the # of channels
+	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
+	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
 	if [ $affinity_mode -eq 4 ] ; then
 		ssh $RP C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
 		ssh $RP C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done
@@ -623,10 +525,6 @@ linux_forward_setup() {
 	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
 }
 
-#GFN_PUB_PORT_START=8000
-#GS_PORT_START=10000
-#RP_PORT_START=5000
-
 linux_forward_nat_setup() {
 	nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
 	ssh $RP $nat_cmd
@@ -637,8 +535,6 @@ linux_forward_nat_setup() {
 }
 
 ovs_forward_setup() {
-	setup_vm_ovs "no"
-
 	# Add forwarding rules
 	ssh $RP ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$LOADER_IP,action=$RP_PUB_PATCH_PORT
 	ssh $RP ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV
@@ -649,8 +545,6 @@ ovs_forward_setup() {
 }
 
 ovs_forward_nat_setup() {
-	setup_vm_ovs "yes"
-
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
 		GC_PORT=$((GFN_PUB_PORT_START+i))
@@ -671,7 +565,6 @@ ovs_forward_nat_setup() {
 }
 
 ovs_forward_ct_setup() {
-	setup_vm_ovs "no"
 
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
@@ -714,12 +607,27 @@ setup_tests() {
 			linux_forward_nat_setup
 			;;
 		ovs_fwd)
+			setup_vm_ovs "no"
+			ovs_forward_setup
+			;;
+		ovs_fwd_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_setup
 			;;
 		ovs_fwd_nat)
+			setup_vm_ovs "no"
+			ovs_forward_nat_setup
+			;;
+		ovs_fwd_nat_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_ct)
+			setup_vm_ovs "no"
+			ovs_forward_ct_setup
+			;;
+		ovs_fwd_ct_offload)
+			setup_vm_ovs "yes"
 			ovs_forward_ct_setup
 			;;
 	esac
@@ -734,62 +642,112 @@ killBGThreads() {
 
 }
 
+#if [ -n $TEST_TO_RUN ]
+#then
+#	echo "Test to run is $TEST_TO_RUN"
+#fi
+
 ### main ###
-setup
+if [ $JUST_DISPLAY_TESTS != "yes" ]
+then
+	setup
 
-echo "Clean Datapath"
-cleanup
+	echo "Clean Datapath"
+	cleanup
 
-# Set profile
-# Check for OFED?
+	# Set profile
+	# Check for OFED?
 
-echo "Init test"
-initTest
-
+	echo "Init test"
+	initTest
+else
+	echo "# DO NOT hand edit. This is generated by $0 with the JUST_DISPLAY_TESTS "
+	echo "# set in the config"
+	echo 
+fi
 # XXX Add a loop for number of sessions : 500, 1000
 # XXX Burst too.
 # XXX H/A
+disp_count=1 
 for mode in $NIC_MODES
 do
-	if [ $mode = "pt" ] ; then
-		RPVM=rp
+	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	then
+		if [ $mode = "pt" ] ; then
+			RPVM=rp
+		else
+			RPVM=rp_vf
+		fi
+		shutdown_vm
 	else
-		RPVM=rp_vf
+		echo 
+		echo "# NiC mode : $mode"
+		echo "------------------------------------------------------------------"
 	fi
-	shutdown_vm
 	for profile in $TEST_PROFILE
 	do
-		startup_vm
-		log_before
-		setup_vm
-		ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log
+		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		then
+			startup_vm
+			log_before
+			setup_vm
+			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log
+		else
+			echo
+		fi
 		for cpu_binding in $CPU_BINDINGS
 		do
-			host_vm_cpu_binding $cpu_binding
+			if [ $JUST_DISPLAY_TESTS != "yes" ]
+			then
+				host_vm_cpu_binding $cpu_binding
+			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
-				rp_irq_affinity $cpu_affinity
-				# echo "$profile, $cpu_binding, $cpu_affinity, $mode, $test"
+				if [ $JUST_DISPLAY_TESTS != "yes" ]
+				then
+					rp_irq_affinity $cpu_affinity
+				fi
+				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
-					setup_tests $t
-					echo "Run test"
-					runTest
-					runMetrics
-					cleanup
-					TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-					mkdir -p /tmp/${TEST_LOG_DIR}
-					mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
-					mv /tmp/${TEST_LOG_DIR} $LOGDIR
+					if [ $JUST_DISPLAY_TESTS = "yes" ]
+					then
+						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+					else
+						if [ -n $TEST_TO_RUN -a $TEST_TO_RUN != $disp_count ]
+						then
+							disp_count=$((disp_count+1))
+							continue
+						fi
+						setup_tests $t
+						#echo "Running test $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						runTest
+						runMetrics
+						cleanup
+						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
+						mkdir -p /tmp/${TEST_LOG_DIR}
+						mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
+						mv /tmp/${TEST_LOG_DIR} $LOGDIR
+					fi
+					disp_count=$((disp_count+1))
 				done
 			done
 		done
-		shutdown_vm
+		if [ $JUST_DISPLAY_TESTS != "yes" ]
+		then
+			shutdown_vm
+		fi
 	done
-	# log_after
-	shutdown_vm
+	if [ $JUST_DISPLAY_TESTS != "yes" ]
+	then
+		# log_after
+		shutdown_vm
+	fi
 done
 
 #log_before
 
-plotLogs
+if [ $JUST_DISPLAY_TESTS != "yes" ]
+then
+	plotLogs
+fi
