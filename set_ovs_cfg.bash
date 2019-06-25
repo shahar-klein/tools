@@ -16,6 +16,8 @@ ovs_forward_setup() {
 	RP_PUB_LEG_MAC=$8
 	LOADER_IP=$9
 	INITIATOR_IP=${10}
+	LOADER_DEV_MAC=${11}
+	INITIATOR_DEV_MAC=${12}
 
 	# Add forwarding rules
 	ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$LOADER_IP,action=$RP_PUB_PATCH_PORT
@@ -39,6 +41,8 @@ ovs_forward_nat_setup() {
 	NUM_SESSIONS=${11}
 	GFN_PUB_PORT_START=${12}
 	GS_PORT_START=${13}
+	LOADER_DEV_MAC=${14}
+	INITIATOR_DEV_MAC=${15}
 
 
 	# XXX It'll take a long time to add these flows via ssh!
@@ -72,6 +76,8 @@ ovs_forward_ct_setup() {
 	NUM_SESSIONS=${11}
 	GFN_PUB_PORT_START=${12}
 	GS_PORT_START=${13}
+	LOADER_DEV_MAC=${14}
+	INITIATOR_DEV_MAC=${15}
 
 	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
