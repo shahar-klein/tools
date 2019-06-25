@@ -71,7 +71,7 @@ if test -f rp_test.config ; then
 else
 	echo "Config file missing ... exiting"
 fi
-
+mkdir $LOGDIR
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -418,7 +418,7 @@ collectCPULogs() {
 
 collectBWLogs() {
 
-	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
 
 
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput
@@ -507,8 +507,9 @@ host_vm_cpu_binding() {
 	for (( cpu=0; cpu<$NUM_CPUS; cpu++ )) 
 	do
 		bindcpu=$((CPU_START+cpu))
-		virsh vcpupin $RPVM $bindcpu
+		virsh vcpupin $RPVM $cpu $bindcpu  > /dev/null 2>&1
 	done
+	logCMD virsh vcpuinfo $RPVM
 }
 
 # XXX Fixme. The ssh below seems to have a couple of issues
@@ -517,18 +518,18 @@ rp_irq_affinity() {
 	# Set the # of channels
 	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
 	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
-#	if [ $affinity_mode -eq 4 ] ; then
-#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | $RP_PRIV_LEG_DEV enp4s0 | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-#		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
-#	else
-#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
-#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
-#	fi
+	if [ $affinity_mode -eq 4 ] ; then
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+	else
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+	fi
 }
 
 linux_forward_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1
-	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
+	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION -r 50:200"
 	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
 }
 
@@ -676,7 +677,7 @@ do
 			startup_vm
 			log_before
 			setup_vm
-			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log
+			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
 		else
 			echo
 		fi
@@ -759,5 +760,9 @@ do
 		break
 	fi
 done
-
+# Tar the log file
+if [ "$(ls -A $LOGDIR)" ]
+then
+	tar -czf $LOGDIR.tar.gz $LOGDIR
+fi
 #log_before
