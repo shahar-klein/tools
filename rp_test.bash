@@ -334,8 +334,8 @@ log_before() {
 	logCMD "ssh $RP ethtool -x $RP_PRIV_LEG_DEV"
 	log "ethtool -P $RP_PRIV_LEG_DEV"
 	logCMD "ssh $RP ethtool -P $RP_PRIV_LEG_DEV"
-	log "ethtool -w $RP_PRIV_LEG_DEV"
-	logCMD "ssh $RP ethtool -w $RP_PRIV_LEG_DEV"
+	#log "ethtool -w $RP_PRIV_LEG_DEV"
+	#logCMD "ssh $RP ethtool -w $RP_PRIV_LEG_DEV"
 	log "ethtool -l $RP_PRIV_LEG_DEV"
 	logCMD "ssh $RP ethtool -l $RP_PRIV_LEG_DEV"
 	log "ethtool --show-priv-flags $RP_PRIV_LEG_DEV"
@@ -359,8 +359,8 @@ log_before() {
 	logCMD "ssh $RP ethtool -x $RP_PUB_LEG_DEV"
 	log "ethtool -P $RP_PUB_LEG_DEV"
 	logCMD "ssh $RP ethtool -P $RP_PUB_LEG_DEV"
-	log "ethtool -w $RP_PUB_LEG_DEV"
-	logCMD "ssh $RP ethtool -w $RP_PUB_LEG_DEV"
+	#log "ethtool -w $RP_PUB_LEG_DEV"
+	#logCMD "ssh $RP ethtool -w $RP_PUB_LEG_DEV"
 	log "ethtool -l $RP_PUB_LEG_DEV"
 	logCMD "ssh $RP ethtool -l $RP_PUB_LEG_DEV"
 	log "ethtool --show-priv-flags $RP_PUB_LEG_DEV"
@@ -410,6 +410,7 @@ collectCPULogs() {
 		idle=`echo $output | cut -d " " -f2 | cut -d"." -f1`
 		guest=`echo $output | cut -d " " -f1`
 		util=$((100-idle))
+		echo $dur $idle >> $LOGDIR/${cpu}.idle
 		echo $dur $util >> $LOGDIR/${cpu}.util
 		echo $dur $guest >> $LOGDIR/${cpu}.guest
 	done
@@ -489,7 +490,7 @@ runMetrics() {
 	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
-		cpu=$((CPUSTART+cpus))
+		cpu=$((CPU_START+cpus))
 		collectCPULogs $cpu &
 		P2KILL+="$! "
 
@@ -506,23 +507,23 @@ host_vm_cpu_binding() {
 	for (( cpu=0; cpu<$NUM_CPUS; cpu++ )) 
 	do
 		bindcpu=$((CPU_START+cpu))
-		virsh vcpupin $RPVM $dindcpu
+		virsh vcpupin $RPVM $bindcpu
 	done
 }
 
+# XXX Fixme. The ssh below seems to have a couple of issues
 rp_irq_affinity() {
 	affinity_mode=$1
 	# Set the # of channels
 	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
 	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
-	if [ $affinity_mode -eq 4 ] ; then
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-	else
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-	fi
-
+#	if [ $affinity_mode -eq 4 ] ; then
+#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | $RP_PRIV_LEG_DEV enp4s0 | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
+#		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+#	else
+#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+#		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+#	fi
 }
 
 linux_forward_setup() {
@@ -652,14 +653,15 @@ fi
 # XXX Burst too.
 # XXX H/A
 disp_count=1 
+done_run=false
 for mode in $NIC_MODES
 do
 	if [ $DONT_RUN_TESTS != "yes" ]
 	then
 		if [ $mode = "pt" ] ; then
-			RPVM=rp
+			RPVM=$RPVM_PT
 		else
-			RPVM=rp_vf
+			RPVM=$RPVM_SRIOV
 		fi
 		shutdown_vm
 	else
@@ -712,7 +714,7 @@ do
 							continue
 						fi
 						setup_tests $t
-						#echo "Running test $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						echo "Running test $mode, $profile, $cpu_binding, $cpu_affinity, $t"
 						runTest
 						runMetrics
 						cleanup
@@ -720,20 +722,41 @@ do
 						mkdir -p /tmp/${TEST_LOG_DIR}
 						mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
 						mv /tmp/${TEST_LOG_DIR} $LOGDIR
+						if [ -n $TEST_TO_RUN ]
+						then
+							done_run="true"
+							break
+						fi
 					fi
 					disp_count=$((disp_count+1))
 				done
+				if [ $done_run = "true" ]
+				then
+					break
+				fi
 			done
+			if [ $done_run = "true" ]
+			then
+				break
+			fi
 		done
 		if [ $DONT_RUN_TESTS != "yes" ]
 		then
 			shutdown_vm
+		fi
+		if [ $done_run = "true" ]
+		then
+			break
 		fi
 	done
 	if [ $DONT_RUN_TESTS != "yes" ]
 	then
 		# log_after
 		shutdown_vm
+	fi
+	if [ $done_run = "true" ]
+	then
+		break
 	fi
 done
 
