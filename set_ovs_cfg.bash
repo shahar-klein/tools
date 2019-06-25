@@ -43,16 +43,17 @@ ovs_forward_nat_setup() {
 	GS_PORT_START=${13}
 	LOADER_DEV_MAC=${14}
 	INITIATOR_DEV_MAC=${15}
+	RP_PRIV_LEG_IP=${16}
+	RP_PUB_LEG_IP=${17}
 
 
-	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
 		GC_PORT=$((GFN_PUB_PORT_START+i))
 		GS_PORT=$((GS_PORT_START+i))
 
 		# Add the pub side of the flows
 		ovs-ofctl add-flow $BRPUB priority=100,in_port=$RP_PUB_LEG_DEV,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$LOADER_IP,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT
-		ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_tp_src=$RP_PORT,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV
+		ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,$RP_PRIV_LEG_DEV
 
 		# Add the priv _side of the flows
 		ovs-ofctl add-flow $BRPRIV priority=100,in_port=$RP_PRIV_LEG_DEV,udp,nw_dst=$RP_PRIV_LEG_IP,tp_src=$GS_PORT,action=mod_nw_dst=$INITIATOR_IP,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT
@@ -78,8 +79,9 @@ ovs_forward_ct_setup() {
 	GS_PORT_START=${13}
 	LOADER_DEV_MAC=${14}
 	INITIATOR_DEV_MAC=${15}
+	RP_PRIV_LEG_IP=${16}
+	RP_PUB_LEG_IP=${17}
 
-	# XXX It'll take a long time to add these flows via ssh!
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
 		GC_PORT=$((GFN_PUB_PORT_START+i))
 		GS_PORT=$((GS_PORT_START+i))
