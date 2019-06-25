@@ -519,11 +519,11 @@ rp_irq_affinity() {
 	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
 	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
 	if [ $affinity_mode -eq 4 ] ; then
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo "obase=16;$((1<<$C))" | bc > /proc/irq/${r}/smp_affinity ; done'
-		ssh $RP 'C=3 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=3 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 	else
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
-		ssh $RP 'C=-1 ; for r in `cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: ` ; do  C=$((C+1)) ; echo \"obase=16;$((1<<$C))\" | bc > /proc/irq/${r}/smp_affinity ; done'
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 	fi
 }
 
