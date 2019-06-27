@@ -65,6 +65,7 @@ RESULTSDIR=${1:?result location not set}
 # Test number for the test to run, from rp_test.list
 TEST_TO_RUN=$2
 TEST_TO_PLOT=$2
+PLOT_DIR=$3
 # read the config file
 if test -f rp_test.config ; then
 	. rp_test.config
@@ -437,45 +438,57 @@ collectBWLogs() {
 }
 
 plotLogs() {
-	testdir=$1
-	if [ -z GNUPLOT_TERMINAL ]
-	then
-		GNUPLOT_TERMINAL=qt
-	fi
+	dir=$1
+	test=$2
+	testdir=$1/$2
+	test2plot=$3
+	#if [ -z GNUPLOT_TERMINAL ]
+	#then
+	#	GNUPLOT_TERMINAL=qt
+	#fi
 	gnuplot -persist <<-EOFMarker
-		set terminal $GNUPLOT_TERMINAL
-		set multiplot layout 4,2 rowsfirst
-		set yrange [0:$THROUGHPUT_YRANGE]
+	
+		set multiplot layout 1,2 rowsfirst title "Test #$test2plot"
 
-		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes"
-		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
+		set yrange [*:1250000000]
+		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
+			"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 
-		plot "$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
-		plot "$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
+		set yrange [0:*]
+		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped",\
+			"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
 
-		set yrange [0:$CPU_YRANGE]
 
-		set label 1 'Idle %' at graph .3,0.5
-		# User for instead of explicitly going over the list
-		plot "${testdir}/0.util" using 1:2 with lines title "CPU 0", \
-			"${testdir}/1.util" using 1:2 with lines title "CPU 1", \
+		unset multiplot
+	EOFMarker
+
+
+	gnuplot -persist <<-EOFMarker
+		set multiplot layout 1,2 rowsfirst title "Test #$test2plot"
+		set label 1 'Host % utilization' at graph .3,0.2
+		set yrange [0:100]
+		# Use for instead of explicitly going over the list
+		plot "${testdir}/1.util" using 1:2 with lines title "CPU 1", \
 			"${testdir}/2.util" using 1:2 with lines title "CPU 2", \
 			"${testdir}/3.util" using 1:2 with lines title "CPU 3", \
 			"${testdir}/4.util" using 1:2 with lines title "CPU 4", \
 			"${testdir}/5.util" using 1:2 with lines title "CPU 5", \
 			"${testdir}/6.util" using 1:2 with lines title "CPU 6", \
-			"${testdir}/7.util" using 1:2 with lines title "CPU 7"
+			"${testdir}/7.util" using 1:2 with lines title "CPU 7", \
+			"${testdir}/8.util" using 1:2 with lines title "CPU 8"
 
-		set label 1 'Guest %' at graph .3,0.5
-		# User for instead of explicitly going over the list
-		plot "${testdir}/0.guest" using 1:2 with lines title "CPU 0", \
-			"${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
+
+		set label 1 'Guest % utilization' at graph .3,0.2
+		# Use for instead of explicitly going over the list
+		set yrange [0:100]
+		plot "${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
 			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
-			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
-			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
-			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
-			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
-			"${testdir}/7.guest" using 1:2 with lines title "CPU 7"
+			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \	
+			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \	
+			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \	
+			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \	
+			"${testdir}/7.guest" using 1:2 with lines title "CPU 7", \	
+			"${testdir}/8.guest" using 1:2 with lines title "CPU 8"
 		unset multiplot
 	EOFMarker
 
@@ -654,9 +667,9 @@ fi
 
 if [ $JUST_PLOT_RESULTS = "yes" ]
 then
-	if [ -z $TEST_TO_PLOT ]
+	if [ -z $TEST_TO_PLOT -o -z $PLOT_DIR ]
 	then
-		echo "Need to specify Test # to plot"
+		echo "Need to specify Test # and its location to plot"
 	fi
 	exit
 fi
@@ -667,6 +680,8 @@ fi
 disp_count=1 
 LOGDIR_HEAD=${LOGDIR}
 done_run=false
+# XXX For display and plot we need to get the test name from the number instead
+# of going over the loop just for that.
 for mode in $NIC_MODES
 do
 	LOGDIR=${LOGDIR_HEAD}/${mode}
@@ -687,9 +702,9 @@ do
 	for profile in $TEST_PROFILE
 	do
 		LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}
-		mkdir -p $LOGDIR
 		if [ $DONT_RUN_TESTS != "yes" ]
 		then
+			mkdir -p $LOGDIR
 			startup_vm
 			log_before
 			setup_vm
@@ -700,24 +715,23 @@ do
 		for cpu_binding in $CPU_BINDINGS
 		do
 			LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}
-			#mkdir -p $LOGDIR
 			if [ $DONT_RUN_TESTS != "yes" ]
 			then
+				#mkdir -p $LOGDIR
 				host_vm_cpu_binding $cpu_binding
 			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
 				LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}
-				#mkdir -p $LOGDIR
 				if [ $DONT_RUN_TESTS != "yes" ]
 				then
+					#mkdir -p $LOGDIR
 					rp_irq_affinity $cpu_affinity
 				fi
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
 					LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
-					mkdir -p $LOGDIR
 					if [ $JUST_DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
@@ -728,8 +742,11 @@ do
 							disp_count=$((disp_count+1))
 							continue
 						fi
-						plotLogs $LOGDIR
+						# plotLogs $LOGDIR
+						done_run="true"
+						break
 					else
+						mkdir -p $LOGDIR
 						if [ -n "$TEST_TO_RUN" ]
 						then
 							if [ $TEST_TO_RUN != $disp_count ]
@@ -789,5 +806,10 @@ done
 if [ "$(ls -A $LOGDIR_HEAD)" ]
 then
 	tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD
+fi
+
+if [ $JUST_PLOT_RESULTS = "yes" ]
+then
+	plotLogs $PLOT_DIR $LOGDIR $TEST_TO_PLOT
 fi
 #log_before
