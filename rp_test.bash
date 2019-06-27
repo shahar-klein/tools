@@ -228,10 +228,6 @@ setup_vm() {
 	RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
 	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
-	
-	RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
-	flush_ip_dev $RP $RP_PUB_LEG_DEV
-	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
 
 	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc toeplitz"
 	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc toeplitz"
@@ -248,7 +244,7 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
-
+	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
 	logCMD "ssh $RP ovs-ofctl del-flows $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
@@ -374,8 +370,8 @@ cleanup() {
 	#fwd
 	wait
 	set +e
-	logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
-	logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
+	# logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
+	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
@@ -383,6 +379,18 @@ cleanup() {
 	#ovs
 	log "Clean OVS flows"
 	logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
+
+	logCMD "ssh $RP tc filter del dev $RP_PRIV_LEG_DEV parent ffff: > /dev/null 2>&1"
+	logCMD "ssh $RP tc filter del dev $RP_PUB_LEG_DEV parent ffff: > /dev/null 2>&1"
+	# echo "cleaned up OVS"
+	# ssh $RP ovs-vsctl show
+
+	# XXX Set the IPs back, if needed (this is needed after OVS cleanup only)
+	flush_ip_dev $RP $RP_PRIV_LEG_DEV
+	set_ip_dev $RP $RP_PRIV_LEG_DEV $RP_PRIV_LEG_IP
+
+	flush_ip_dev $RP $RP_PUB_LEG_DEV
+	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
 
 	ssh $LOADER pkill gonoodle
 	ssh $INITIATOR pkill gonoodle
@@ -420,11 +428,11 @@ collectBWLogs() {
 
 	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
 
-
-	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput
-	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput
-	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
-	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped
+ 
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped > /dev/null 2>&1
 
 }
 
@@ -475,12 +483,12 @@ plotLogs() {
 
 runTest() {
 	#start loader
-	echo "staring loaded..."
+	#echo "staring loaded..."
 	cmdBG $LOADER_CMD
 	sleep 1
 
 
-	echo "staring initiator..."
+	#echo "staring initiator..."
 	cmdBG $INITIATOR_CMD
 
 }
@@ -495,7 +503,7 @@ runMetrics() {
 		P2KILL+="$! "
 
 	done
-	echo "Waiting.."
+	#echo "Waiting.."
 	wait
 }
 
@@ -611,12 +619,12 @@ killBGThreads() {
 	#for p in $P2KILL ; do
 	#	kill -9 $p
 	#done
-	echo "Waiting..."
+	#echo "Waiting..."
 	wait
 
 }
 
-#if [ -n $TEST_TO_RUN ]
+#if [ -n "$TEST_TO_RUN" ]
 #then
 #	echo "Test to run is $TEST_TO_RUN"
 #fi
@@ -644,9 +652,12 @@ then
 	echo 
 fi
 
-if [ $JUST_PLOT_RESULTS = "yes" -a -z $TEST_TO_PLOT ]
+if [ $JUST_PLOT_RESULTS = "yes" ]
 then
-	echo "Need to specify Test # to plot"
+	if [ -z $TEST_TO_PLOT ]
+	then
+		echo "Need to specify Test # to plot"
+	fi
 	exit
 fi
 
@@ -654,9 +665,12 @@ fi
 # XXX Burst too.
 # XXX H/A
 disp_count=1 
+LOGDIR_HEAD=${LOGDIR}
 done_run=false
 for mode in $NIC_MODES
 do
+	LOGDIR=${LOGDIR_HEAD}/${mode}
+	# mkdir -p $LOGDIR
 	if [ $DONT_RUN_TESTS != "yes" ]
 	then
 		if [ $mode = "pt" ] ; then
@@ -672,6 +686,8 @@ do
 	fi
 	for profile in $TEST_PROFILE
 	do
+		LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}
+		mkdir -p $LOGDIR
 		if [ $DONT_RUN_TESTS != "yes" ]
 		then
 			startup_vm
@@ -683,12 +699,16 @@ do
 		fi
 		for cpu_binding in $CPU_BINDINGS
 		do
+			LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}
+			#mkdir -p $LOGDIR
 			if [ $DONT_RUN_TESTS != "yes" ]
 			then
 				host_vm_cpu_binding $cpu_binding
 			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
+				LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}
+				#mkdir -p $LOGDIR
 				if [ $DONT_RUN_TESTS != "yes" ]
 				then
 					rp_irq_affinity $cpu_affinity
@@ -696,6 +716,8 @@ do
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
+					LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
+					mkdir -p $LOGDIR
 					if [ $JUST_DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
@@ -706,24 +728,27 @@ do
 							disp_count=$((disp_count+1))
 							continue
 						fi
-						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-						plotLogs $TEST_LOG_DIR
+						plotLogs $LOGDIR
 					else
-						if [ -n $TEST_TO_RUN -a $TEST_TO_RUN != $disp_count ]
+						if [ -n "$TEST_TO_RUN" ]
 						then
-							disp_count=$((disp_count+1))
-							continue
+							if [ $TEST_TO_RUN != $disp_count ]
+							then
+								disp_count=$((disp_count+1))
+								continue
+							fi
 						fi
 						setup_tests $t
-						echo "Running test $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						#if [ $cpu_affinity = "8" ]
+						#then
+						#	echo "Quitting..."
+						#	exit
+						#fi
+						echo "Running test $disp_count, $mode, $profile, $cpu_binding, $cpu_affinity, $t"
 						runTest
 						runMetrics
-						# cleanup
-						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-						mkdir -p /tmp/${TEST_LOG_DIR}
-						mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
-						mv /tmp/${TEST_LOG_DIR} $LOGDIR
-						if [ -n $TEST_TO_RUN ]
+						cleanup
+						if [ -n "$TEST_TO_RUN" ]
 						then
 							done_run="true"
 							break
@@ -761,8 +786,8 @@ do
 	fi
 done
 # Tar the log file
-if [ "$(ls -A $LOGDIR)" ]
+if [ "$(ls -A $LOGDIR_HEAD)" ]
 then
-	tar -czf $LOGDIR.tar.gz $LOGDIR
+	tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD
 fi
 #log_before
