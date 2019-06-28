@@ -235,6 +235,7 @@ startup_vm() {
 
 	done
 	sleep 2
+	log "$VM ready"
 }
 
 reboot_vm() {
@@ -301,7 +302,6 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
-	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
 	logCMD "ssh $RP ovs-ofctl del-flows $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
@@ -605,7 +605,7 @@ rp_irq_affinity() {
 }
 
 linux_forward_setup() {
-	ssh $RP sysctl net.ipv4.ip_forward=1
+	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
 	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
 	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
 }
@@ -704,13 +704,12 @@ if [ $DONT_RUN_TESTS != "yes" ]
 then
 	setup
 
-	echo "Clean Datapath"
+	echo "Initializing test .."
 	cleanup
 
 	# Set profile
 	# Check for OFED?
 
-	echo "Init test"
 	initTest
 fi
 
@@ -778,12 +777,12 @@ do
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
-					LOGDIR=${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
 					if [ $JUST_DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
 					elif [ $JUST_PLOT_RESULTS = "yes" ]
 					then
+						LOGDIR=${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
 						if [ $TEST_TO_PLOT != $disp_count ]
 						then
 							disp_count=$((disp_count+1))
@@ -793,6 +792,7 @@ do
 						done_run="true"
 						break
 					else
+						LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
 						mkdir -p $LOGDIR
 						if [ -n "$TEST_TO_RUN" ]
 						then
@@ -808,7 +808,7 @@ do
 						#	echo "Quitting..."
 						#	exit
 						#fi
-						echo "Running test $disp_count, $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						echo "Running test $disp_count, $mode, $profile, $cpu_binding CPU, $cpu_affinity, $t"
 						runTest
 						runMetrics
 						cleanup
