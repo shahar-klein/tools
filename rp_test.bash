@@ -207,7 +207,7 @@ shutdown_vm() {
 	log "shutting down $RPVM"
 
 	set +e
-	virsh shutdown $RPVM
+	virsh shutdown $RPVM >/dev/null 2>&1
 	set -e
 	sleep 2
 }
@@ -293,7 +293,8 @@ setup_vm() {
 
 setup_vm_ovs() {
 
-	offload=$1
+	nic_mode=$1
+	offload=$2
 	logCMD "ssh $RP ovs-vsctl set open . other-config:hw-offload=false"
 	if [ $offload = "yes" ]
 	then
@@ -322,7 +323,7 @@ setup_vm_ovs() {
 	logCMD "ssh $RP ip link set dev $BRPUB up"
 
 	# For VFs we need to update the bridge MAC addresses
-	if [ $mode = "sriov" ]
+	if [ $nic_mode = "sriov" ]
 	then
 		RP_PRIV_LEG_MAC=`get_mac_dev $RP $RP_PRIV_LEG_DEV`
 		RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
@@ -482,8 +483,9 @@ collectCPULogs() {
 }	
 
 collectBWLogs() {
+	nic_mode=$1
 
-	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp $nic_mode
 
  
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput > /dev/null 2>&1
@@ -584,7 +586,8 @@ runTest() {
 }
 
 runMetrics() {
-	collectBWLogs &
+	nic_mode=$1
+	collectBWLogs $nic_mode &
 	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
@@ -670,7 +673,8 @@ ovs_forward_ct_setup() {
 # linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct
 # XXX non-offload case
 setup_tests() {
-	tests=$1
+	nic_mode=$1
+	tests=$2
 	case $tests in 
 		linux_fwd)
 			linux_forward_setup
@@ -679,27 +683,27 @@ setup_tests() {
 			linux_forward_nat_setup
 			;;
 		ovs_fwd)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_setup
 			;;
 		ovs_fwd_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_setup
 			;;
 		ovs_fwd_nat)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_nat_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_ct)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_ct_setup
 			;;
 		ovs_fwd_ct_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_ct_setup
 			;;
 	esac
@@ -727,6 +731,11 @@ then
 
 	echo "Initializing test .."
 	cleanup
+
+	RPVM=$RPVM_PT
+	shutdown_vm
+	RPVM=$RPVM_SRIOV
+	shutdown_vm
 
 	# Set profile
 	# Check for OFED?
@@ -760,7 +769,6 @@ do
 		else
 			RPVM=$RPVM_SRIOV
 		fi
-		shutdown_vm
 	else
 		echo 
 		echo "# NiC mode : $mode"
@@ -775,7 +783,13 @@ do
 			startup_vm
 			log_before
 			setup_vm
-			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+			# XXX mlnx_tune has some issues with 
+			# "AttributeError: 'NoneType' object has no attribute 'report_status'"
+			# when run in the SRIOV VM.
+			if [ $mode = "pt" ]
+			then
+				ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+			fi
 		else
 			echo
 		fi
@@ -823,7 +837,7 @@ do
 								continue
 							fi
 						fi
-						setup_tests $t
+						setup_tests $mode $t
 						#if [ $cpu_affinity = "8" ]
 						#then
 						#	echo "Quitting..."
@@ -831,7 +845,7 @@ do
 						#fi
 						echo "Running test $disp_count, $mode, $profile, $cpu_binding CPU, $cpu_affinity, $t"
 						runTest
-						runMetrics
+						runMetrics $mode
 						cleanup
 						if [ -n "$TEST_TO_RUN" ]
 						then
@@ -860,16 +874,17 @@ do
 			break
 		fi
 	done
-	#if [ $RUN_TESTS = "yes" ]
-	#then
-	#	# log_after
-	#	shutdown_vm
-	#fi
 	if [ $done_run = "true" ]
 	then
 		break
 	fi
+	if [ $RUN_TESTS = "yes" ]
+	then
+		# log_after
+		shutdown_vm
+	fi
 done
+
 # Tar the log file
 if [ $RUN_TESTS = "yes" ]
 then
