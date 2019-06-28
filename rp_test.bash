@@ -873,9 +873,10 @@ done
 # Tar the log file
 if [ $RUN_TESTS = "yes" ]
 then
-	if [ -a "$(ls -A $LOGDIR_HEAD)" ]
+	if [ "$(ls -A $LOGDIR_HEAD)" ]
 	then
-		tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD
+		echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
+		tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 	fi
 fi
 

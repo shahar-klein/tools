@@ -1,16 +1,20 @@
 1. To run the tests:
 ---------------------
-	- sure the config params are set correctly in rp_test.config file, i.e.
-		- LOADER, LOADER_DEV
-		- INITIATOR, INITIATOR_DEV
-		- RP, RP_PRIV_LEG_DEV, RP_PUB_LEG_DEV
-	- set	
+	- Make sure the config params are set correctly in rp_test.config file, i.e. 
+		- The IP and device on the Game Seat equivalent
+			- LOADER, LOADER_DEV 		
+		- The IP and device on the external client equivalent
+			- INITIATOR, INITIATOR_DEV	
+		- The IP, and both devices on the RP.
+			- RP, RP_PRIV_LEG_DEV, RP_PUB_LEG_DEV
+	- Enable running tests
 		- RUN_TESTS=yes
 		- PLOT_RESULTS=no
 		- DISPLAY_TESTS=no
-	- set the following base on the tests to run
-		- NUM_SESSIONS, BW_PER_SESSION, DURATION
+	- Select tests to run
 		- TEST_PROFILE, TESTS, NIC_MODES, CPU_BINDINGS, CPU_AFFINITIES
+	- Selct test parameters
+		- NUM_SESSIONS, BW_PER_SESSION (in bits/sec), DURATION (in secs)
 
 Run the test:
 	bash rp_test.bash <result_dir> [<test number>]
