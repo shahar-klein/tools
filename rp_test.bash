@@ -61,18 +61,68 @@ wait
 #5. OVS Forward without CT. (for now without offload)
 #[3 - 5 : without offloads]
 
-RESULTSDIR=${1:?result location not set}
+# Location to store results from test run
+RESULTSDIR=${1}
 # Test number for the test to run, from rp_test.list
 TEST_TO_RUN=$2
+PLOT_DIR=$1
 TEST_TO_PLOT=$2
-PLOT_DIR=$3
 # read the config file
 if test -f rp_test.config ; then
 	. rp_test.config
 else
 	echo "Config file missing ... exiting"
 fi
-mkdir $LOGDIR
+
+if [ $DONT_RUN_TESTS != "yes" ]
+then
+	if [ -z $RESULTSDIR ]
+	then
+		echo "Need to specify location to save results"
+		exit
+	fi
+	mkdir -p $LOGDIR
+fi
+
+if [ $JUST_PLOT_RESULTS = "yes" ]
+then
+	if [ -z $TEST_TO_PLOT -o -z $PLOT_DIR ]
+	then
+		echo "Need to specify Test # and its location to plot"
+		exit
+	fi
+fi
+
+# XXX Combine these three into one
+if [ $DONT_RUN_TESTS != "yes" ]
+then
+	if [ $JUST_PLOT_RESULTS = "yes"  -o $JUST_DISPLAY_TESTS = "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "1. $DONT_RUN_TESTS $JUST_PLOT_RESULTS $JUST_DISPLAY_TESTS"
+		exit
+	fi
+fi
+
+if [ $JUST_PLOT_RESULTS = "yes" ]
+then
+	if [ $DONT_RUN_TESTS != "yes"  -o $JUST_DISPLAY_TESTS = "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "2. $DONT_RUN_TESTS $JUST_PLOT_RESULTS $JUST_DISPLAY_TESTS"
+		exit
+	fi
+fi
+
+if [ $JUST_DISPLAY_TESTS = "yes" ]
+then
+	if [ $JUST_PLOT_RESULTS = "yes"  -o $DONT_RUN_TESTS != "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "3. $DONT_RUN_TESTS $JUST_PLOT_RESULTS $JUST_DISPLAY_TESTS"
+		exit
+	fi
+fi
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -92,17 +142,23 @@ cmdBG() {
 }
 
 log() {
-	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
-	echo ${d}:"${@}" >> $LOG
-	
+	if [ -d $LOG ]
+	then
+		d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
+		echo ${d}:"${@}" >> $LOG
+	fi
 }
 
 logCMD() {
 	cmd=$@
 	output=`$cmd`
 	log $cmd
-	echo "${output}" >> $LOG
+	if [ -d $LOG ]
+	then
+		echo "${output}" >> $LOG
+	fi
 }
+
 
 cmdBG() {
 	$@ >/dev/null 2>&1 &
@@ -455,7 +511,7 @@ plotLogs() {
 			"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 
 		set yrange [0:*]
-		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped",\
+		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
 			"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
 
 
@@ -483,11 +539,11 @@ plotLogs() {
 		set yrange [0:100]
 		plot "${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
 			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
-			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \	
-			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \	
-			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \	
-			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \	
-			"${testdir}/7.guest" using 1:2 with lines title "CPU 7", \	
+			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
+			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
+			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
+			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
+			"${testdir}/7.guest" using 1:2 with lines title "CPU 7", \
 			"${testdir}/8.guest" using 1:2 with lines title "CPU 8"
 		unset multiplot
 	EOFMarker
@@ -665,15 +721,6 @@ then
 	echo 
 fi
 
-if [ $JUST_PLOT_RESULTS = "yes" ]
-then
-	if [ -z $TEST_TO_PLOT -o -z $PLOT_DIR ]
-	then
-		echo "Need to specify Test # and its location to plot"
-	fi
-	exit
-fi
-
 # XXX Add a loop for number of sessions : 500, 1000
 # XXX Burst too.
 # XXX H/A
@@ -731,7 +778,7 @@ do
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
-					LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
+					LOGDIR=${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
 					if [ $JUST_DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
@@ -803,13 +850,17 @@ do
 	fi
 done
 # Tar the log file
-if [ "$(ls -A $LOGDIR_HEAD)" ]
+if [ $DONT_RUN_TESTS != "yes" ]
 then
-	tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD
+	if [ -a "$(ls -A $LOGDIR_HEAD)" ]
+	then
+		tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD
+	fi
 fi
 
 if [ $JUST_PLOT_RESULTS = "yes" ]
 then
+	# echo "Plotting $PLOT_DIR $LOGDIR $TEST_TO_PLOT"
 	plotLogs $PLOT_DIR $LOGDIR $TEST_TO_PLOT
 fi
 #log_before
