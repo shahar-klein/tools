@@ -1,0 +1,59 @@
+1. To run the tests:
+---------------------
+	- sure the config params are set correctly in rp_test.config file, i.e.
+		- LOADER, LOADER_DEV
+		- INITIATOR, INITIATOR_DEV
+		- RP, RP_PRIV_LEG_DEV, RP_PUB_LEG_DEV
+	- set	
+		- DONT_RUN_TESTS=no
+		- JUST_PLOT_RESULTS=no
+		- JUST_DISPLAY_TESTS=no
+	- set the following base on the tests to run
+		- NUM_SESSIONS, BW_PER_SESSION, DURATION
+		- TEST_PROFILE, TESTS, NIC_MODES, CPU_BINDINGS, CPU_AFFINITIES
+
+Run the test:
+	bash rp_test.bash <result_dir> [<test number>]
+
+If you want to specify the test number, do the following before running the test:
+
+	- Edit rp_test.config to set
+		- DONT_RUN_TESTS=yes
+		- JUST_PLOT_RESULTS=no
+		- JUST_DISPLAY_TESTS=yes
+	- Select the test scenarios you are interested in by setting
+		- TEST_PROFILE, TESTS, NIC_MODES, CPU_BINDINGS, CPU_AFFINITIES
+	- Run
+		bash rp_test.bash > rp_test.run (or just standard output)
+	- Reset the parameters in rp_test.config to:
+		- DONT_RUN_TESTS=no
+		- JUST_PLOT_RESULTS=no
+		- JUST_DISPLAY_TESTS=no
+	- Uset the test number from rp_test.run (or output) in
+		bash rp_test.bash <result_dir> <test number>
+
+
+2. To Display the test listing
+-------------------------------
+	- Edit rp_test.config to set
+		- DONT_RUN_TESTS=yes
+		- JUST_PLOT_RESULTS=no
+		- JUST_DISPLAY_TESTS=yes
+	- Select the test scenarios you are interested in by setting
+		- TEST_PROFILE, TESTS, NIC_MODES, CPU_BINDINGS, CPU_AFFINITIES
+	- Run
+		bash rp_test.bash > rp_test.run (or just standard output)
+
+3.To plot the graphs of Bandwidth and CPU for a specific run
+-------------------------------------------------------------
+	- Run the test as in 1. above
+	- cp the tar file from the <result_dir> if you want to run the plots on a different
+	  system
+	- Set the following in rp_test.config
+		- DONT_RUN_TESTS=yes
+		- JUST_PLOT_RESULTS=yes
+		- JUST_DISPLAY_TESTS=no
+	- Plot using
+		- bash rp_test.bash <result_dir> <test_number>
+	- You can get the test number as in 2. above
+	- This assumes gnuplot can plot on the terminal you are using
