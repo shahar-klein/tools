@@ -504,13 +504,17 @@ plotLogs() {
 	#fi
 	gnuplot -persist <<-EOFMarker
 	
-		set multiplot layout 1,2 rowsfirst title "Test #$test2plot - Bandwidth"
+		set multiplot layout 1,2 rowsfirst title "Test #$test2plot - Bandwidth in Bytes/sec"
 
-		set yrange [*:1250000000]
+		# Range assuming max os 15Gbps
+		set yrange [*:1500000000]
+		set label 1 'Bytes/sec' at graph .3,.1
 		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
 			"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 
-		set yrange [0:*]
+		# These are packets, so use 1000000 as the upper limit, as an estimate.
+		set yrange [0:1000000]
+		set label 1 'Packets/sec' at graph .3,.1
 		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
 			"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
 
