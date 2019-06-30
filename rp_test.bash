@@ -61,9 +61,11 @@ wait
 #5. OVS Forward without CT. (for now without offload)
 #[3 - 5 : without offloads]
 
-RESULTSDIR=${1:?result location not set}
+# Location to store results from test run
+RESULTSDIR=${1}
 # Test number for the test to run, from rp_test.list
 TEST_TO_RUN=$2
+PLOT_DIR=$1
 TEST_TO_PLOT=$2
 # read the config file
 if test -f rp_test.config ; then
@@ -71,7 +73,56 @@ if test -f rp_test.config ; then
 else
 	echo "Config file missing ... exiting"
 fi
-mkdir $LOGDIR
+
+if [ $RUN_TESTS = "yes" ]
+then
+	if [ -z $RESULTSDIR ]
+	then
+		echo "Need to specify location to save results"
+		exit
+	fi
+	mkdir -p $LOGDIR
+fi
+
+if [ $PLOT_RESULTS = "yes" ]
+then
+	if [ -z $TEST_TO_PLOT -o -z $PLOT_DIR ]
+	then
+		echo "Need to specify Test # and its location to plot"
+		exit
+	fi
+fi
+
+# XXX Combine these three into one
+if [ $RUN_TESTS = "yes" ]
+then
+	if [ $PLOT_RESULTS = "yes"  -o $DISPLAY_TESTS = "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "1. $RUN_TESTS $PLOT_RESULTS $DISPLAY_TESTS"
+		exit
+	fi
+fi
+
+if [ $PLOT_RESULTS = "yes" ]
+then
+	if [ $RUN_TESTS = "yes"  -o $DISPLAY_TESTS = "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "2. $RUN_TESTS $PLOT_RESULTS $DISPLAY_TESTS"
+		exit
+	fi
+fi
+
+if [ $DISPLAY_TESTS = "yes" ]
+then
+	if [ $PLOT_RESULTS = "yes"  -o $RUN_TESTS = "yes" ]
+	then
+		echo "Running tests, listing them and plotting are mutually exclusive"
+		echo "3. $RUN_TESTS $PLOT_RESULTS $DISPLAY_TESTS"
+		exit
+	fi
+fi
 
 log() {
 	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
@@ -91,17 +142,23 @@ cmdBG() {
 }
 
 log() {
-	d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
-	echo ${d}:"${@}" >> $LOG
-	
+	if [ -d $LOG ]
+	then
+		d=`date +[%d:%m:%y" "%H:%M:%S:%N]`
+		echo ${d}:"${@}" >> $LOG
+	fi
 }
 
 logCMD() {
 	cmd=$@
 	output=`$cmd`
 	log $cmd
-	echo "${output}" >> $LOG
+	if [ -d $LOG ]
+	then
+		echo "${output}" >> $LOG
+	fi
 }
+
 
 cmdBG() {
 	$@ >/dev/null 2>&1 &
@@ -150,7 +207,7 @@ shutdown_vm() {
 	log "shutting down $RPVM"
 
 	set +e
-	virsh shutdown $RPVM
+	virsh shutdown $RPVM >/dev/null 2>&1
 	set -e
 	sleep 2
 }
@@ -178,6 +235,7 @@ startup_vm() {
 
 	done
 	sleep 2
+	log "$VM ready"
 }
 
 reboot_vm() {
@@ -228,10 +286,6 @@ setup_vm() {
 	RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
 	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
-	
-	RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
-	flush_ip_dev $RP $RP_PUB_LEG_DEV
-	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
 
 	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc toeplitz"
 	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc toeplitz"
@@ -239,7 +293,8 @@ setup_vm() {
 
 setup_vm_ovs() {
 
-	offload=$1
+	nic_mode=$1
+	offload=$2
 	logCMD "ssh $RP ovs-vsctl set open . other-config:hw-offload=false"
 	if [ $offload = "yes" ]
 	then
@@ -248,7 +303,6 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
-
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
 	logCMD "ssh $RP ovs-ofctl del-flows $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
@@ -269,7 +323,7 @@ setup_vm_ovs() {
 	logCMD "ssh $RP ip link set dev $BRPUB up"
 
 	# For VFs we need to update the bridge MAC addresses
-	if [ $mode = "sriov" ]
+	if [ $nic_mode = "sriov" ]
 	then
 		RP_PRIV_LEG_MAC=`get_mac_dev $RP $RP_PRIV_LEG_DEV`
 		RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
@@ -374,8 +428,8 @@ cleanup() {
 	#fwd
 	wait
 	set +e
-	logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
-	logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
+	# logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
+	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
@@ -383,6 +437,18 @@ cleanup() {
 	#ovs
 	log "Clean OVS flows"
 	logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
+
+	logCMD "ssh $RP tc filter del dev $RP_PRIV_LEG_DEV parent ffff: > /dev/null 2>&1"
+	logCMD "ssh $RP tc filter del dev $RP_PUB_LEG_DEV parent ffff: > /dev/null 2>&1"
+	# echo "cleaned up OVS"
+	# ssh $RP ovs-vsctl show
+
+	# XXX Set the IPs back, if needed (this is needed after OVS cleanup only)
+	flush_ip_dev $RP $RP_PRIV_LEG_DEV
+	set_ip_dev $RP $RP_PRIV_LEG_DEV $RP_PRIV_LEG_IP
+
+	flush_ip_dev $RP $RP_PUB_LEG_DEV
+	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
 
 	ssh $LOADER pkill gonoodle
 	ssh $INITIATOR pkill gonoodle
@@ -417,76 +483,111 @@ collectCPULogs() {
 }	
 
 collectBWLogs() {
+	nic_mode=$1
 
-	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp $nic_mode
 
-
-	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput
-	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput
-	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped
-	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped
+ 
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped > /dev/null 2>&1
 
 }
 
 plotLogs() {
-	testdir=$1
-	if [ -z GNUPLOT_TERMINAL ]
-	then
-		GNUPLOT_TERMINAL=qt
-	fi
+	dir=$1
+	test=$2
+	testdir=$1/$2
+	test2plot=$3
+	#if [ -z GNUPLOT_TERMINAL ]
+	#then
+	#	GNUPLOT_TERMINAL=qt
+	#fi
 	gnuplot -persist <<-EOFMarker
-		set terminal $GNUPLOT_TERMINAL
-		set multiplot layout 4,2 rowsfirst
-		set yrange [0:$THROUGHPUT_YRANGE]
+	
+		set multiplot layout 1,2 rowsfirst title "Test #$test2plot - Bandwidth in Bytes/sec"
 
-		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes"
-		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Dropped"
+		# Range assuming max os 15Gbps
+		set yrange [*:1500000000]
+		set label 1 'Bytes/sec' at graph .3,.1
+		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
+			"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 
-		plot "$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
-		plot "$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Dropped"
+		# These are packets, so use 1000000 as the upper limit, as an estimate.
+		set yrange [0:1000000]
+		set label 1 'Packets/sec' at graph .3,.1
+		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
+			"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
 
-		set yrange [0:$CPU_YRANGE]
 
-		set label 1 'Idle %' at graph .3,0.5
-		# User for instead of explicitly going over the list
-		plot "${testdir}/0.util" using 1:2 with lines title "CPU 0", \
-			"${testdir}/1.util" using 1:2 with lines title "CPU 1", \
-			"${testdir}/2.util" using 1:2 with lines title "CPU 2", \
-			"${testdir}/3.util" using 1:2 with lines title "CPU 3", \
-			"${testdir}/4.util" using 1:2 with lines title "CPU 4", \
-			"${testdir}/5.util" using 1:2 with lines title "CPU 5", \
-			"${testdir}/6.util" using 1:2 with lines title "CPU 6", \
-			"${testdir}/7.util" using 1:2 with lines title "CPU 7"
-
-		set label 1 'Guest %' at graph .3,0.5
-		# User for instead of explicitly going over the list
-		plot "${testdir}/0.guest" using 1:2 with lines title "CPU 0", \
-			"${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
-			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
-			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
-			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
-			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
-			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
-			"${testdir}/7.guest" using 1:2 with lines title "CPU 7"
 		unset multiplot
 	EOFMarker
+
+	gnuplot -persist <<-EOFMarker
+		set multiplot layout 4,2 rowsfirst title "Test #$test2plot - CPU Utilization"
+		set yrange [0:100]
+		plot "${testdir}/1.util" using 1:2 with lines title "CPU 1"
+		plot "${testdir}/2.util" using 1:2 with lines title "CPU 2"
+		plot "${testdir}/3.util" using 1:2 with lines title "CPU 3"
+		plot "${testdir}/4.util" using 1:2 with lines title "CPU 4"
+
+		# Use for instead of explicitly going over the list
+		set yrange [0:100]
+		plot "${testdir}/5.util" using 1:2 with lines title "CPU 5"
+		plot "${testdir}/6.util" using 1:2 with lines title "CPU 6"
+		plot "${testdir}/7.util" using 1:2 with lines title "CPU 7"
+		plot "${testdir}/8.util" using 1:2 with lines title "CPU 8"
+		unset multiplot
+	EOFMarker
+
+	# Plot the guest CPU info from the host
+#	gnuplot -persist <<-EOFMarker
+#		set multiplot layout 1,2 rowsfirst title "Test #$test2plot"
+#		set label 1 'Host % utilization' at graph .3,0.2
+#		set yrange [0:100]
+#		# Use for instead of explicitly going over the list
+#		plot "${testdir}/1.util" using 1:2 with lines title "CPU 1", \
+#			"${testdir}/2.util" using 1:2 with lines title "CPU 2", \
+#			"${testdir}/3.util" using 1:2 with lines title "CPU 3", \
+#			"${testdir}/4.util" using 1:2 with lines title "CPU 4", \
+#			"${testdir}/5.util" using 1:2 with lines title "CPU 5", \
+#			"${testdir}/6.util" using 1:2 with lines title "CPU 6", \
+#			"${testdir}/7.util" using 1:2 with lines title "CPU 7", \
+#			"${testdir}/8.util" using 1:2 with lines title "CPU 8"
+#
+#
+#		set label 1 'Guest % utilization' at graph .3,0.2
+#		# Use for instead of explicitly going over the list
+#		set yrange [0:100]
+#		plot "${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
+#			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
+#			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
+#			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
+#			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
+#			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
+#			"${testdir}/7.guest" using 1:2 with lines title "CPU 7", \
+#			"${testdir}/8.guest" using 1:2 with lines title "CPU 8"
+#		unset multiplot
+#	EOFMarker
 
 }
 
 runTest() {
 	#start loader
-	echo "staring loaded..."
+	#echo "staring loaded..."
 	cmdBG $LOADER_CMD
 	sleep 1
 
 
-	echo "staring initiator..."
+	#echo "staring initiator..."
 	cmdBG $INITIATOR_CMD
 
 }
 
 runMetrics() {
-	collectBWLogs &
+	nic_mode=$1
+	collectBWLogs $nic_mode &
 	P2KILL+="$! "
 	for ((cpus=0;cpus<NUM_CPUS;cpus++))
 	do
@@ -495,7 +596,7 @@ runMetrics() {
 		P2KILL+="$! "
 
 	done
-	echo "Waiting.."
+	#echo "Waiting.."
 	wait
 }
 
@@ -528,7 +629,7 @@ rp_irq_affinity() {
 }
 
 linux_forward_setup() {
-	ssh $RP sysctl net.ipv4.ip_forward=1
+	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
 	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
 	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
 }
@@ -572,7 +673,8 @@ ovs_forward_ct_setup() {
 # linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_nat ovs_fwd_ct
 # XXX non-offload case
 setup_tests() {
-	tests=$1
+	nic_mode=$1
+	tests=$2
 	case $tests in 
 		linux_fwd)
 			linux_forward_setup
@@ -581,27 +683,27 @@ setup_tests() {
 			linux_forward_nat_setup
 			;;
 		ovs_fwd)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_setup
 			;;
 		ovs_fwd_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_setup
 			;;
 		ovs_fwd_nat)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_nat_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_nat_setup
 			;;
 		ovs_fwd_ct)
-			setup_vm_ovs "no"
+			setup_vm_ovs $nic_mode "no"
 			ovs_forward_ct_setup
 			;;
 		ovs_fwd_ct_offload)
-			setup_vm_ovs "yes"
+			setup_vm_ovs $nic_mode "yes"
 			ovs_forward_ct_setup
 			;;
 	esac
@@ -611,60 +713,62 @@ killBGThreads() {
 	#for p in $P2KILL ; do
 	#	kill -9 $p
 	#done
-	echo "Waiting..."
+	#echo "Waiting..."
 	wait
 
 }
 
-#if [ -n $TEST_TO_RUN ]
+#if [ -n "$TEST_TO_RUN" ]
 #then
 #	echo "Test to run is $TEST_TO_RUN"
 #fi
 
 ### main ###
 
-if [ $DONT_RUN_TESTS != "yes" ]
+if [ $RUN_TESTS = "yes" ]
 then
 	setup
 
-	echo "Clean Datapath"
+	echo "Initializing test .."
 	cleanup
+
+	RPVM=$RPVM_PT
+	shutdown_vm
+	RPVM=$RPVM_SRIOV
+	shutdown_vm
 
 	# Set profile
 	# Check for OFED?
 
-	echo "Init test"
 	initTest
 fi
 
-if [ $JUST_DISPLAY_TESTS = "yes" ]
+if [ $DISPLAY_TESTS = "yes" ]
 then
-	echo "# DO NOT hand edit. This is generated by $0 with the JUST_DISPLAY_TESTS "
+	echo "# DO NOT hand edit. This is generated by $0 with the DISPLAY_TESTS "
 	echo "# set in the config"
 	echo 
-fi
-
-if [ $JUST_PLOT_RESULTS = "yes" -a -z $TEST_TO_PLOT ]
-then
-	echo "Need to specify Test # to plot"
-	exit
 fi
 
 # XXX Add a loop for number of sessions : 500, 1000
 # XXX Burst too.
 # XXX H/A
 disp_count=1 
+LOGDIR_HEAD=${LOGDIR}
 done_run=false
+# XXX For display and plot we need to get the test name from the number instead
+# of going over the loop just for that.
 for mode in $NIC_MODES
 do
-	if [ $DONT_RUN_TESTS != "yes" ]
+	LOGDIR=${LOGDIR_HEAD}/${mode}
+	# mkdir -p $LOGDIR
+	if [ $RUN_TESTS = "yes" ]
 	then
 		if [ $mode = "pt" ] ; then
 			RPVM=$RPVM_PT
 		else
 			RPVM=$RPVM_SRIOV
 		fi
-		shutdown_vm
 	else
 		echo 
 		echo "# NiC mode : $mode"
@@ -672,58 +776,78 @@ do
 	fi
 	for profile in $TEST_PROFILE
 	do
-		if [ $DONT_RUN_TESTS != "yes" ]
+		LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}
+		if [ $RUN_TESTS = "yes" ]
 		then
+			mkdir -p $LOGDIR
 			startup_vm
 			log_before
 			setup_vm
-			ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+			# XXX mlnx_tune has some issues with 
+			# "AttributeError: 'NoneType' object has no attribute 'report_status'"
+			# when run in the SRIOV VM.
+			if [ $mode = "pt" ]
+			then
+				ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+			fi
 		else
 			echo
 		fi
 		for cpu_binding in $CPU_BINDINGS
 		do
-			if [ $DONT_RUN_TESTS != "yes" ]
+			LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}
+			if [ $RUN_TESTS = "yes" ]
 			then
+				#mkdir -p $LOGDIR
 				host_vm_cpu_binding $cpu_binding
 			fi
 			for  cpu_affinity in $CPU_AFFINITIES
 			do
-				if [ $DONT_RUN_TESTS != "yes" ]
+				LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}
+				if [ $RUN_TESTS = "yes" ]
 				then
+					#mkdir -p $LOGDIR
 					rp_irq_affinity $cpu_affinity
 				fi
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS
 				do
-					if [ $JUST_DISPLAY_TESTS = "yes" ]
+					if [ $DISPLAY_TESTS = "yes" ]
 					then
 						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
-					elif [ $JUST_PLOT_RESULTS = "yes" ]
+					elif [ $PLOT_RESULTS = "yes" ]
 					then
+						LOGDIR=${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
 						if [ $TEST_TO_PLOT != $disp_count ]
 						then
 							disp_count=$((disp_count+1))
 							continue
 						fi
-						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-						plotLogs $TEST_LOG_DIR
+						# plotLogs $LOGDIR
+						done_run="true"
+						break
 					else
-						if [ -n $TEST_TO_RUN -a $TEST_TO_RUN != $disp_count ]
+						LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
+						mkdir -p $LOGDIR
+						if [ -n "$TEST_TO_RUN" ]
 						then
-							disp_count=$((disp_count+1))
-							continue
+							if [ $TEST_TO_RUN != $disp_count ]
+							then
+								disp_count=$((disp_count+1))
+								continue
+							fi
 						fi
-						setup_tests $t
-						echo "Running test $mode, $profile, $cpu_binding, $cpu_affinity, $t"
+						setup_tests $mode $t
+						#if [ $cpu_affinity = "8" ]
+						#then
+						#	echo "Quitting..."
+						#	exit
+						#fi
+						echo "Running test $disp_count, $mode, $profile, $cpu_binding CPU, $cpu_affinity, $t"
 						runTest
-						runMetrics
-						# cleanup
-						TEST_LOG_DIR="${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}"
-						mkdir -p /tmp/${TEST_LOG_DIR}
-						mv $LOGDIR/* /tmp/${TEST_LOG_DIR}
-						mv /tmp/${TEST_LOG_DIR} $LOGDIR
-						if [ -n $TEST_TO_RUN ]
+						runMetrics $mode
+						cleanup
+						if [ -n "$TEST_TO_RUN" ]
 						then
 							done_run="true"
 							break
@@ -741,7 +865,7 @@ do
 				break
 			fi
 		done
-		#if [ $DONT_RUN_TESTS != "yes" ]
+		#if [ $RUN_TESTS = "yes" ]
 		#then
 		#	shutdown_vm
 		#fi
@@ -750,19 +874,30 @@ do
 			break
 		fi
 	done
-	#if [ $DONT_RUN_TESTS != "yes" ]
-	#then
-	#	# log_after
-	#	shutdown_vm
-	#fi
 	if [ $done_run = "true" ]
 	then
 		break
 	fi
+	if [ $RUN_TESTS = "yes" ]
+	then
+		# log_after
+		shutdown_vm
+	fi
 done
+
 # Tar the log file
-if [ "$(ls -A $LOGDIR)" ]
+if [ $RUN_TESTS = "yes" ]
 then
-	tar -czf $LOGDIR.tar.gz $LOGDIR
+	if [ "$(ls -A $LOGDIR_HEAD)" ]
+	then
+		echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
+		tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
+	fi
+fi
+
+if [ $PLOT_RESULTS = "yes" ]
+then
+	# echo "Plotting $PLOT_DIR $LOGDIR $TEST_TO_PLOT"
+	plotLogs $PLOT_DIR $LOGDIR $TEST_TO_PLOT
 fi
 #log_before
