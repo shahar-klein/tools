@@ -212,51 +212,59 @@ shutdown_vm() {
 	sleep 2
 }
 
+wait_vm() {
+	VM=$1
+
+	local chars=( \| / – \\ )
+	local i=0
+	while ! timeout 0.3 virsh domifaddr $VM  &> /dev/null ; do
+        	        if [ -t 1 ] ; then
+                	        i=$((++i%4));
+                        	echo "         (${chars[$i]})"
+                        	echo -e "\033[2A"
+                	fi
+                	sleep 0.3
+
+	done
+
+	VMIP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
+
+	while ! timeout 0.3 ping -c 1 -n $VMIP  &> /dev/null ; do
+        	        if [ -t 1 ] ; then
+                	        i=$((++i%4));
+                        	echo "         (${chars[$i]})"
+                        	echo -e "\033[2A"
+                	fi
+                	sleep 0.3
+
+	done
+	RP=$VMIP
+	sleep 2
+}
+
 startup_vm() {
-	VM=$RPVM
-	VMIP=$RP
+	VM=$1
+	
 
 	log "starting $VM"
 
 	set +e
 	virsh start $VM
 	set -e
+	
+	wait_vm $VM
 
-	sleep 2
-	local chars=( \| / – \\ )
-	local i=0
-	while ! timeout 0.3 ping -c 1 -n $VMIP  &> /dev/null ; do
-        	        if [ -t 1 ] ; then
-                	        i=$((++i%4));
-                        	echo "         (${chars[$i]})"
-                        	echo -e "\033[2A"
-                	fi
-                	sleep 0.3
-
-	done
-	sleep 2
 	log "$VM ready"
 }
 
 reboot_vm() {
 	VM=$1
-	VMIP=$2
 
 	log "rebooting $VM"
 
 	virsh reboot $VM
-	sleep 2
-	local chars=( \| / – \\ )
-	local i=0
-	while ! timeout 0.3 ping -c 1 -n $VMIP  &> /dev/null ; do
-        	        if [ -t 1 ] ; then
-                	        i=$((++i%4));
-                        	echo "         (${chars[$i]})"
-                        	echo -e "\033[2A"
-                	fi
-                	sleep 0.3
 
-	done
+	wait_vm $VM
 }
 
 setup() {
@@ -730,7 +738,7 @@ then
 	setup
 
 	echo "Initializing test .."
-	cleanup
+	#cleanup
 
 	RPVM=$RPVM_PT
 	shutdown_vm
@@ -780,7 +788,8 @@ do
 		if [ $RUN_TESTS = "yes" ]
 		then
 			mkdir -p $LOGDIR
-			startup_vm
+			startup_vm $RPVM
+			cleanup $RPVM
 			log_before
 			setup_vm
 			# XXX mlnx_tune has some issues with 
