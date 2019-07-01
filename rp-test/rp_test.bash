@@ -798,6 +798,8 @@ setup_dp_profile $mode $dp_profile
 echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
+echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
+tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 #cleanup
 
 exit
