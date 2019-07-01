@@ -62,15 +62,17 @@ wait
 #[3 - 5 : without offloads]
 
 # Location to store results from test run
-RESULTSDIR=${1}
+LOGDIR=${1}
+LOGDIR_HEAD=${LOGDIR}
 # Test number for the test to run, from rp_test.list
-mode=$2
-profile=$3
-cpu_binding=$4
-cpu_affinity=$5
-dp_profile=$6
-NUM_SESSIONS=$7
-BW_PER_SESSION=$8
+case_num=$2
+mode=$3
+profile=$4
+cpu_binding=$5
+cpu_affinity=$6
+dp_profile=$7
+NUM_SESSIONS=$8
+BW_PER_SESSION=$9
 
 TEST_TO_RUN=$2
 PLOT_DIR=$1
@@ -84,12 +86,13 @@ fi
 
 if [ $RUN_TESTS = "yes" ]
 then
-	if [ -z $RESULTSDIR ]
+	if [ -z $LOGDIR ]
 	then
 		echo "Need to specify location to save results"
 		exit
 	fi
 	mkdir -p $LOGDIR
+	LOG=${LOGDIR}/main.log
 fi
 
 if [ $PLOT_RESULTS = "yes" ]
@@ -154,7 +157,7 @@ cmdBG() {
 set -u
 set -e
 
-log "`date`  ##Start $RESULTSDIR##"
+log "`date`  ##Start $LOGDIR##"
 log "==================================="
 log " "
 log " "
@@ -616,8 +619,8 @@ host_vm_cpu_binding() {
 rp_irq_affinity() {
 	affinity_mode=$1
 	# Set the # of channels
-	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode
-	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode
+	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode > /dev/null 2>&1
+	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode > /dev/null 2>&1
 	if [ $affinity_mode -eq 4 ] ; then
 		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 		ssh $RP "C=3 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
@@ -634,6 +637,7 @@ linux_forward_setup() {
 }
 
 linux_forward_nat_setup() {
+	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
 	nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
 	ssh $RP $nat_cmd
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PUB_LEG_DEV} -j SNAT --to-source ${RP_PUB_LEG_IP}
@@ -726,6 +730,10 @@ killBGThreads() {
 
 if [ $RUN_TESTS = "yes" ]
 then
+	#set up the test env according to the input:
+	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}
+	mkdir -v -p $LOGDIR
+
 	setup
 
 	echo "Initializing test .."
@@ -772,10 +780,6 @@ fi
 #5. OVS Forward without CT. (for now without offload)
 #[3 - 5 : without offloads]
 
-#set up the test env according to the input:
-LOGDIR_HEAD=${LOGDIR}
-LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}
-mkdir -v -p $LOGDIR
 if [ $mode = "pt" ] ; then
 	RPVM=$RPVM_PT
 else
@@ -783,12 +787,13 @@ else
 fi
 startup_vm $RPVM
 cleanup $RPVM
+cp $TEST_RUN_FILE $LOGDIR_HEAD
 log_before $RPVM
 setup_vm $RPVM
 # XXX mlnx_tune has some issues with 
 # "AttributeError: 'NoneType' object has no attribute 'report_status'"
 # when run in the SRIOV VM.
-if [ $mode = "pt" ] ; then
+if [ $profile != "NONE" -a $mode = "pt" ] ; then
 	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
 fi
 
@@ -798,8 +803,8 @@ setup_dp_profile $mode $dp_profile
 echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
-echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
-tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
+#echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
+#tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 #cleanup
 
 exit
