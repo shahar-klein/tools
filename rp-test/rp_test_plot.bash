@@ -10,10 +10,16 @@ fi
 
 plotLogs() {
 	dir=$1
-	local test=$3
-	testdir=$1/$3
-	title=`echo $test | tr -s "_" ","`
 	which=$2
+	shift
+	shift
+	ntest=`echo seq ${#@}`
+	echo $ntest
+	local test=$@
+	echo $(test[1])
+	echo $test
+	#testdir=$1/$3
+	title=`echo $test | tr -s "_" ","`
 	#if [ -z GNUPLOT_TERMINAL ]
 	#then
 	#	GNUPLOT_TERMINAL=qt
@@ -26,9 +32,7 @@ plotLogs() {
 	if [ -n $which -a $which = "bw" ]; then
 		cpu_plot=0
 	fi
-	ntest=`echo $test|wc -w`
-	echo $ntest
-	for i in {1..$ntest}
+	for i in {1..8}
 	do
 		echo "$dir/${test[$i]}"
 	done
