@@ -69,6 +69,8 @@ profile=$3
 cpu_binding=$4
 cpu_affinity=$5
 dp_profile=$6
+NUM_SESSIONS=$7
+BW_PER_SESSION=$8
 
 TEST_TO_RUN=$2
 PLOT_DIR=$1
@@ -772,7 +774,7 @@ fi
 
 #set up the test env according to the input:
 LOGDIR_HEAD=${LOGDIR}
-LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}
+LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}
 mkdir -v -p $LOGDIR
 if [ $mode = "pt" ] ; then
 	RPVM=$RPVM_PT
@@ -793,7 +795,7 @@ fi
 host_vm_cpu_binding $cpu_binding
 rp_irq_affinity $cpu_affinity
 setup_dp_profile $mode $dp_profile
-echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile"
+echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #cleanup
