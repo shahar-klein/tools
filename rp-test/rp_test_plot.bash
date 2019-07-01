@@ -28,7 +28,7 @@ plotLogs() {
 	fi
 	ntest=`echo $test|wc -w`
 	echo $ntest
-	for i in {1..$ntest}; do
+	for i in {1 .. $ntest}; do
 		echo $dir/${tests[$i]}
 	done
 	if [ $bw_plot -eq 1 ] ; then
