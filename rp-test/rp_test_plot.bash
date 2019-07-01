@@ -10,10 +10,10 @@ fi
 
 plotLogs() {
 	dir=$1
-	local test=$2
-	testdir=$1/$2
+	local test=$3
+	testdir=$1/$3
 	title=`echo $test | tr -s "_" ","`
-	which=$3
+	which=$2
 	#if [ -z GNUPLOT_TERMINAL ]
 	#then
 	#	GNUPLOT_TERMINAL=qt
@@ -26,24 +26,31 @@ plotLogs() {
 	if [ -n $which -a $which = "bw" ]; then
 		cpu_plot=0
 	fi
+	ntest=`echo $test|wc -w`
+	echo $ntest
+	for i in {1..$ntest}; do
+		echo $dir/${tests[$i]}
+	done
 	if [ $bw_plot -eq 1 ] ; then
 		gnuplot -persist <<-EOFMarker
 		
-			set multiplot layout 1,2 rowsfirst title "$title"
+			set multiplot layout $ntest,2 rowsfirst title "$title"
 	
 			# Range assuming 5-15Gbps
 			set yrange [625000000:1875000000]
 			set label 1 'Bytes/sec' at graph .3,.1
 			set ylabel "Bandwidth : Range 5 - 15 Gb/sec"
-			plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
-				"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
+			#plot for [i=1:$ntest] '$dir/${tests[$i]}/${RP_PRIV_LEG_DEV}.tput using 1:2 with lines title "RX Bytes", \
+			#	'$dir/${tests[$i]}/${RP_PUB_LEG_DEV}.tput using 1:2 with lines title "TX Bytes"
+			#plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
+			#	"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 	
 			# These are packets, so use 1000000 as the upper limit, as an estimate.
-			set yrange [0:1000000]
-			set label 1 'Packets/sec' at graph .3,.1
-			set ylabel "Number of packets"
-			plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
-				"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
+			#set yrange [0:1000000]
+			#set label 1 'Packets/sec' at graph .3,.1
+			#set ylabel "Number of packets"
+			#plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
+			#	"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
 	
 	
 			unset multiplot
@@ -105,19 +112,11 @@ plotLogs() {
 #plotLogs case_1_11912_Jun-30-2019 match linux_fwd_100 [cpu|bw]
 # plotLogs case_1_11912_Jun-30-2019 all [cpu|bw]
 if [ $2 = "all" ] ; then
-	for test in `ls $1` ; do
-		if [ $test = "main.log" -o $test = "rp_test.runs" ] ; then
-			continue
-		fi
-		plotLogs $1 $test $2
-	done
+	tests=`ls $1 | egrep -v "main.log|rp_test.runs`
+	plotLogs $1 $2 $tests
 elif [ $2 = "match" ]; then
-	for test in `ls $1 | grep $3` ; do
-		if [ $test = "main.log" -o $test = "rp_test.runs" ] ; then
-			continue
-		fi
-		plotLogs $1 $test $4 
-	done
+	tests=`ls $1 | egrep -v "main.log|rp_test.runs" | grep $3`
+	plotLogs $1 $4 $tests
 else
-	plotLogs $1 $2 $3
+	plotLogs $1 "both" $2
 fi
