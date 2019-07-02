@@ -70,7 +70,7 @@ if [ $CMD = "list" ]; then
 	exit
 fi
 outline_all > $RUNS
-shift
+#shift
 LOGDIR=$1
 shift
 CASES=$@
