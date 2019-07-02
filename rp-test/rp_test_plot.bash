@@ -12,48 +12,62 @@ plotLogs() {
 	dir=$1
 	local test=$2
 	testdir=$1/$2
-	test2plot=$3
+	title=`echo $test | tr -s "_" ","`
+	which=$3
 	#if [ -z GNUPLOT_TERMINAL ]
 	#then
 	#	GNUPLOT_TERMINAL=qt
 	#fi
-	gnuplot -persist <<-EOFMarker
+	bw_plot=1
+	cpu_plot=1
+	if [ -n $which -a $which = "cpu" ]; then
+		bw_plot=0
+	fi
+	if [ -n $which -a $which = "bw" ]; then
+		cpu_plot=0
+	fi
+	if [ $bw_plot -eq 1 ] ; then
+		gnuplot -persist <<-EOFMarker
+		
+			set multiplot layout 1,2 rowsfirst title "$title"
 	
-		set multiplot layout 1,2 rowsfirst title "Test #$test2plot - Bandwidth in Bytes/sec"
-
-		# Range assuming max os 15Gbps
-		set yrange [*:1500000000]
-		set label 1 'Bytes/sec' at graph .3,.1
-		plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
-			"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
-
-		# These are packets, so use 1000000 as the upper limit, as an estimate.
-		set yrange [0:1000000]
-		set label 1 'Packets/sec' at graph .3,.1
-		plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
-			"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
-
-
-		unset multiplot
-	EOFMarker
-
-	gnuplot -persist <<-EOFMarker
-		set multiplot layout 4,2 rowsfirst title "Test #$test2plot - CPU Utilization"
-		set yrange [0:100]
-		plot "${testdir}/1.util" using 1:2 with lines title "CPU 1"
-		plot "${testdir}/2.util" using 1:2 with lines title "CPU 2"
-		plot "${testdir}/3.util" using 1:2 with lines title "CPU 3"
-		plot "${testdir}/4.util" using 1:2 with lines title "CPU 4"
-
-		# Use for instead of explicitly going over the list
-		set yrange [0:100]
-		plot "${testdir}/5.util" using 1:2 with lines title "CPU 5"
-		plot "${testdir}/6.util" using 1:2 with lines title "CPU 6"
-		plot "${testdir}/7.util" using 1:2 with lines title "CPU 7"
-		plot "${testdir}/8.util" using 1:2 with lines title "CPU 8"
-		unset multiplot
-	EOFMarker
-
+			# Range assuming 5-15Gbps
+			set yrange [625000000:1875000000]
+			set label 1 'Bytes/sec' at graph .3,.1
+			set ylabel "Bandwidth : Range 5 - 15 Gb/sec"
+			plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
+				"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
+	
+			# These are packets, so use 1000000 as the upper limit, as an estimate.
+			set yrange [0:1000000]
+			set label 1 'Packets/sec' at graph .3,.1
+			set ylabel "Number of packets"
+			plot "$testdir/${RP_PRIV_LEG_DEV}.dropped" using 1:2 with lines title "RX Packets Dropped", \
+				"$testdir/${RP_PUB_LEG_DEV}.dropped" using 1:2 with lines title "TX Packets Dropped"
+	
+	
+			unset multiplot
+		EOFMarker
+	fi
+	if [ $cpu_plot -eq 1 ] ; then
+		gnuplot -persist <<-EOFMarker
+			set title noenhanced
+			set multiplot layout 4,2 rowsfirst title "$title"
+			set yrange [0:100]
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 1"
+			plot "${testdir}/2.util" using 1:2 with lines title "CPU 2"
+			plot "${testdir}/3.util" using 1:2 with lines title "CPU 3"
+			plot "${testdir}/4.util" using 1:2 with lines title "CPU 4"
+	
+			# Use for instead of explicitly going over the list
+			set yrange [0:100]
+			plot "${testdir}/5.util" using 1:2 with lines title "CPU 5"
+			plot "${testdir}/6.util" using 1:2 with lines title "CPU 6"
+			plot "${testdir}/7.util" using 1:2 with lines title "CPU 7"
+			plot "${testdir}/8.util" using 1:2 with lines title "CPU 8"
+			unset multiplot
+		EOFMarker
+	fi
 	# Plot the guest CPU info from the host
 #	gnuplot -persist <<-EOFMarker
 #		set multiplot layout 1,2 rowsfirst title "Test #$test2plot"
@@ -87,6 +101,23 @@ plotLogs() {
 }
 
 
-#plotLogs  case_1_11912_Jun-30-2019 pt_IP_FORWARDING_MULTI_STREAM_0_LOSS_pinned_4_linux_fwd_100 case1
-
-plotLogs $1 $2 $3
+#plotLogs  case_1_11912_Jun-30-2019 pt_IP_FORWARDING_MULTI_STREAM_0_LOSS_pinned_4_linux_fwd_100 [cpu|bw]
+#plotLogs case_1_11912_Jun-30-2019 match linux_fwd_100 [cpu|bw]
+# plotLogs case_1_11912_Jun-30-2019 all [cpu|bw]
+if [ $2 = "all" ] ; then
+	for test in `ls $1` ; do
+		if [ $test = "main.log" -o $test = "rp_test.runs" ] ; then
+			continue
+		fi
+		plotLogs $1 $test $2
+	done
+elif [ $2 = "match" ]; then
+	for test in `ls $1 | grep $3` ; do
+		if [ $test = "main.log" -o $test = "rp_test.runs" ] ; then
+			continue
+		fi
+		plotLogs $1 $test $4 
+	done
+else
+	plotLogs $1 $2 $3
+fi
