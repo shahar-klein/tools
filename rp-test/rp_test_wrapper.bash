@@ -38,11 +38,11 @@ RUNS=rp_test.runs
 #NUM_SESSIONS="100 500 1000"
 
 # Running the following subset
-MODES="sriov"
+MODES="bm"
 PROFILES="NONE"
-CPU_BINDINGS="pinned dangling"
+CPU_BINDINGS="pinned"
 CPU_AFFINITIES="4 8"
-DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct"
+DATAPATHS="linux_fwd"
 NUM_SESSIONS="100"
 BANDWIDTH_PER_SESSION=100m
 
@@ -69,25 +69,25 @@ if [ $CMD = "list" ]; then
 	outline_all
 	exit
 fi
-outline_all > $RUNS
-#shift
-LOGDIR=$1
 shift
-CASES=$@
-if [ $CASES = "all" ] ; then
-	CASES=`grep case $RUNS | awk '{print $1}'`
-fi
-echo $CASES
-
+LOGDIR=$1
 # Log file location
 D=`date +%b-%d-%Y`
 LOGDIR+=_$$
 LOGDIR+=_$D
+mkdir -p $LOGDIR
+outline_all > $LOGDIR/$RUNS
+shift
+CASES=$@
+if [ $CASES = "all" ] ; then
+	CASES=`grep case $LOGDIR/$RUNS | awk '{print $1}'`
+fi
+echo $CASES
 
 for CASE in $CASES ; do
-	args=`grep -w $CASE $RUNS`
+	args=`grep -w $CASE $LOGDIR/$RUNS`
 	echo $args
-	bash rp_test.bash $LOGDIR $args
+	bash -x rp_test.bash $LOGDIR $args
 done
 
 echo "Tar'ing $LOGDIR as $LOGDIR.tar.gz"
