@@ -217,7 +217,6 @@ wait_vm() {
 
 	while [ 1 ] ; do
 		VMIP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
-		echo "DEBUGG: VMIP=$VMIP"
 		if [ -z $VMIP ] ; then
 			echo "Waiting for $VM to get an ip address"
 			sleep 2
