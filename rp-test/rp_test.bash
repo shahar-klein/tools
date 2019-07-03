@@ -913,7 +913,7 @@ setup_vm $RPVM
 # XXX mlnx_tune has some issues with 
 # "AttributeError: 'NoneType' object has no attribute 'report_status'"
 # when run in the SRIOV VM.
-if [ $profile != "NONE" -a $mode = "pt" ] ; then
+if [ $profile != "NONE" -a $mode != "sriov" ] ; then
 	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
 fi
 
