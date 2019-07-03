@@ -121,3 +121,4 @@ elif [ $2 = "match" ]; then
 else
 	plotLogs $1 $2 $3
 fi
+
