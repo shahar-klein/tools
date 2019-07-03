@@ -73,7 +73,7 @@ plotLogs() {
 			set yrange [625000000:1875000000]
 			set label 1 'Bytes/sec' at graph .3,.1
 			set label 2 '[RX Avg : $rxavgbwps MBps / $rxavgbwbps Mbps]' at graph 0.005,.875
-			set label 3 '[TX Avg : $rxavgbwps MBps / $txavgbwbps Mbps]' at graph 0.005,.85
+			set label 3 '[TX Avg : $rxavgbwps MBps / $txavgbwbps Mbps]' at graph 0.005,.825
 			set ylabel "Bandwidth : Range 0.625 - 1.875 GB/s [5 - 15 Gb/sec]"
 			plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
 				"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
