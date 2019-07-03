@@ -8,6 +8,17 @@ else
 	echo "Config file missing ... exiting"
 fi
 
+compute_average() {
+	file=$1
+	time=$LOG_DURATION
+	local avgbw=0
+	for i in `cat $file | cut -d " " -f2`; do
+		cum=$((total+$i))
+	done
+	bw=$((cum/time))
+	echo $avgbw
+}
+
 plotLogs() {
 	dir=$1
 	local test=$2
@@ -26,6 +37,9 @@ plotLogs() {
 	if [ -n $which -a $which = "bw" ]; then
 		cpu_plot=0
 	fi
+	avgbw=compute_average $testdir/${RP_PRIV_LEG_DEV}.tput
+	echo $avgbw
+	return
 	if [ $bw_plot -eq 1 ] ; then
 		gnuplot -persist <<-EOFMarker
 		
