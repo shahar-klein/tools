@@ -31,15 +31,39 @@ plotLogs() {
 	#fi
 	bw_plot=1
 	cpu_plot=1
-	if [ -n $which -a $which = "cpu" ]; then
+	if [ ! -z $which -a $which = "cpu" ]; then
 		bw_plot=0
 	fi
-	if [ -n $which -a $which = "bw" ]; then
+	if [ ! -z $which -a $which = "bw" ]; then
 		cpu_plot=0
 	fi
-	avgbw=$(compute_average $testdir/${RP_PRIV_LEG_DEV}.tput)
-	echo $avgbw
-	return
+	time=0
+	rxavgbw=0
+	txavgbw=0
+	rxdrop=0
+	txdrop=0
+
+	cum=0
+	for i in `cat $testdir/${RP_PRIV_LEG_DEV}.tput | cut -d " " -f2`; do
+		cum=$((cum+$i))
+		time=$((time+1))
+	done
+	rxavgbw=$((cum/time))
+	rxavgbwps=$((rxavgbw/1000000))
+	rxavgbwbps=$((rxavgbw*8))
+	rxavgbwbps=$((rxavgbwbps/1000000))
+
+	cum=0
+	time=0
+	for i in `cat $testdir/${RP_PUB_LEG_DEV}.tput | cut -d " " -f2`; do
+		cum=$((cum+$i))
+		time=$((time+1))
+	done
+	txavgbw=$((cum/time))
+	txavgbwps=$((txavgbw/1000000))
+	txavgbwbps=$((txavgbw*8))
+	txavgbwbps=$((txavgbwbps/1000000))
+
 	if [ $bw_plot -eq 1 ] ; then
 		gnuplot -persist <<-EOFMarker
 		
@@ -48,11 +72,14 @@ plotLogs() {
 			# Range assuming 5-15Gbps
 			set yrange [625000000:1875000000]
 			set label 1 'Bytes/sec' at graph .3,.1
-			set ylabel "Bandwidth : Range 5 - 15 Gb/sec"
+			set label 2 '[RX Avg : $rxavgbwps MBps / $rxavgbwbps Mbps]' at graph 0.005,.875
+			set label 3 '[TX Avg : $rxavgbwps MBps / $txavgbwbps Mbps]' at graph 0.005,.85
+			set ylabel "Bandwidth : Range 0.625 - 1.875 GB/s [5 - 15 Gb/sec]"
 			plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
 				"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
 	
 			# These are packets, so use 1000000 as the upper limit, as an estimate.
+			unset label
 			set yrange [0:1000000]
 			set label 1 'Packets/sec' at graph .3,.1
 			set ylabel "Number of packets"
