@@ -37,7 +37,7 @@ plotLogs() {
 	if [ -n $which -a $which = "bw" ]; then
 		cpu_plot=0
 	fi
-	avgbw=compute_average $testdir/${RP_PRIV_LEG_DEV}.tput
+	avgbw=$(compute_average $testdir/${RP_PRIV_LEG_DEV}.tput)
 	echo $avgbw
 	return
 	if [ $bw_plot -eq 1 ] ; then
