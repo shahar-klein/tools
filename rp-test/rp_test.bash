@@ -191,15 +191,98 @@ flush_ip_dev() {
 	log "flush_ip_dev $host $dev"
 }
 
-shutdown_vm() {
-	log "shutting down $RPVM"
+# XXX Consolidate these with the VM counterparts
+shutdown_container() {
+	VM=$1 
+	log "shutting down $VM"
 
 	set +e
-	virsh shutdown $RPVM >/dev/null 2>&1
+	docker stop $VM >/dev/null 2>&1
 	set -e
 	sleep 2
 }
 
+wait_container() {
+	VM=$1
+
+	local chars=( \| / – \\ )
+	local i=0
+	while ! timeout 0.3 docker inspect --format '{{ .NetworkSettings.IPAddress }}'  $VM  &> /dev/null ; do
+        	        if [ -t 1 ] ; then
+                	        i=$((++i%4));
+                        	echo "         (${chars[$i]})"
+                        	echo -e "\033[2A"
+                	fi
+                	sleep 0.3
+
+	done
+
+	while [ 1 ] ; do
+		VMIP=`docker inspect --format '{{ .NetworkSettings.IPAddress }}'  $VM`
+		if [ -z $VMIP ] ; then
+			echo "Waiting for $VM to get an ip address"
+			sleep 2
+			continue
+		fi
+		break
+	done
+
+	while ! timeout 0.3 ping -c 1 -n $VMIP  &> /dev/null ; do
+        	        if [ -t 1 ] ; then
+                	        i=$((++i%4));
+                        	echo "         (${chars[$i]})"
+                        	echo -e "\033[2A"
+                	fi
+                	sleep 0.3
+
+	done
+	RP=$VMIP
+	sleep 2
+}
+
+startup_container() {
+	log "starting $RPVM"
+	VM=$1
+
+	set +e
+	#docker run -itd -v $HOME/container-ssh-keys/authorized_keys:/root/.ssh/authorized_keys --cap-add=NET_ADMIN --cpuset-cpus="0-7" --name $VM ${CONTAINER_IMAGE_ID} bin/bash
+	docker start $VM
+	set -e
+
+	docker exec -it $VM service ssh restart >/dev/null 2>&1
+
+	#XXX Start the service instead of this.
+	# docker exec -it $VM /usr/share/openvswitch/scripts/ovs-ctl start > /dev/null2>&1 
+
+	#docker network connect --ip $RP_PRIV_LEG_IP privleg $VM
+	#docker network connect --ip $RP_PUB_LEG_IP publeg $VM
+	
+	echo "done startup_container"
+	wait_container $VM
+	echo "done wait_container"
+
+	log "$VM ready"
+}
+
+reboot_container() {
+	VM=$1
+
+	log "rebooting $VM"
+
+	docker restart $VM
+	docker exec -it $VM   service ssh restart
+	wait_container $VM
+}
+
+shutdown_vm() {
+	VM=$1
+	log "shutting down $VM"
+
+	set +e
+	virsh shutdown $VM >/dev/null 2>&1
+	set -e
+	sleep 2
+}
 wait_vm() {
 	VM=$1
 
@@ -237,6 +320,7 @@ wait_vm() {
 	RP=$VMIP
 	sleep 2
 }
+
 
 startup_vm() {
 	VM=$1
@@ -279,7 +363,8 @@ setup_vm() {
 
 	local VM=$1
 
-	RP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
+	# XXX We already have this info.
+	#RP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
 
 	# https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt:re arp
  	logCMD "ssh $RP sysctl net.ipv4.conf.all.arp_ignore=2"
@@ -363,12 +448,8 @@ setup_vm_ovs() {
 log_before() {
 	local VM=$1
 
-	local RP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
-
-	log ""
-	log "Dominfo $VM "
-	log "========================================="
-	logCMD "virsh dominfo $VM"
+	# We already have the IP.
+	# local RP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
 
 	log ""
 	log "PRIV LEG NIC Stats $RP $RP_PRIV_LEG_DEV"
@@ -434,19 +515,26 @@ log_before() {
 
 # XXX Might want to keep the config around if we want to debug
 cleanup() {
+	mode=$1
 	#clean all potential datapaths
 	#fwd
 	wait
 	set +e
 	# logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
 	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
+
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
 	logCMD "ssh $RP iptables -t nat -F"
+
 	#ovs
-	log "Clean OVS flows"
-	logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
+	# XXX Some issue with the OVS in the docker image, ignore this for BM for now
+	if [ $mode != "bm" ]
+	then
+		log "Clean OVS flows"
+		logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
+	fi
 
 	logCMD "ssh $RP tc filter del dev $RP_PRIV_LEG_DEV parent ffff: > /dev/null 2>&1"
 	logCMD "ssh $RP tc filter del dev $RP_PUB_LEG_DEV parent ffff: > /dev/null 2>&1"
@@ -747,10 +835,9 @@ then
 	echo "Initializing test .."
 	#cleanup
 
-	RPVM=$RPVM_PT
-	shutdown_vm
-	RPVM=$RPVM_SRIOV
-	shutdown_vm
+	shutdown_vm $RPVM_PT
+	shutdown_vm $RPVM_SRIOV
+	shutdown_container $RPVM_CONTAINER
 
 	# Set profile
 	# Check for OFED?
@@ -790,14 +877,36 @@ fi
 
 if [ $mode = "pt" ] ; then
 	RPVM=$RPVM_PT
-else
+elif [ $mode = "sriov" ] ; then
 	RPVM=$RPVM_SRIOV
+elif [ $mode = "bm" ] ; then
+	RPVM=$RPVM_CONTAINER
+else
+	echo "unknown mode $mode, quitting.. "
+	exit
 fi
-startup_vm $RPVM
-cleanup $RPVM
-cp $TEST_RUN_FILE $LOGDIR_HEAD
+if [ $mode = "bm" ] ; then
+	startup_container $RPVM
+	# Save the iptable rules before anything else
+	ssh $RP "iptables-save > /root/working.iptables.rules"
+else
+	startup_vm $RPVM
+fi
+cleanup $mode
+if [ $RPVM != $RPVM_CONTAINER ]; then
+	log ""
+	log "Dominfo $VM "
+	log "========================================="
+	logCMD "virsh dominfo $VM"
+else
+	log ""
+	log "Container $VM "
+	log "========================================="
+	logCMD "docker inspect $VM"
+fi
 log_before $RPVM
 setup_vm $RPVM
+
 # XXX mlnx_tune has some issues with 
 # "AttributeError: 'NoneType' object has no attribute 'report_status'"
 # when run in the SRIOV VM.
@@ -805,7 +914,10 @@ if [ $profile != "NONE" -a $mode = "pt" ] ; then
 	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
 fi
 
-host_vm_cpu_binding $cpu_binding
+#XXX not clear about how to pin in a docker.
+if [ $mode != "bm" ]; then
+	host_vm_cpu_binding $cpu_binding
+fi
 rp_irq_affinity $cpu_affinity
 setup_dp_profile $mode $dp_profile
 echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
@@ -815,6 +927,10 @@ runMetrics $mode
 #tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 #cleanup
 
+# Restore iptable rules, if any
+if [ $mode = "bm" ] ; then
+	ssh $RP "iptables-restore < /root/working.iptables.rules"
+fi
 exit
 
 if [ $DISPLAY_TESTS = "yes" ]
@@ -859,7 +975,7 @@ do
 		then
 			mkdir -p $LOGDIR
 			startup_vm $RPVM
-			cleanup $RPVM
+			cleanup $mode
 			log_before
 			setup_vm
 			# XXX mlnx_tune has some issues with 
@@ -925,7 +1041,7 @@ do
 						echo "Running test $disp_count, $mode, $profile, $cpu_binding CPU, $cpu_affinity, $t"
 						runTest
 						runMetrics $mode
-						cleanup
+						cleanup $mode
 						if [ -n "$TEST_TO_RUN" ]
 						then
 							done_run="true"
@@ -946,7 +1062,7 @@ do
 		done
 		#if [ $RUN_TESTS = "yes" ]
 		#then
-		#	shutdown_vm
+		#	shutdown_vm $RPVM
 		#fi
 		if [ $done_run = "true" ]
 		then
@@ -960,7 +1076,7 @@ do
 	if [ $RUN_TESTS = "yes" ]
 	then
 		# log_after
-		shutdown_vm
+		shutdown_vm $RPVM
 	fi
 done
 
