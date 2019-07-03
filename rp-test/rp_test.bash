@@ -828,7 +828,7 @@ then
 
 	setup
 
-	echo "Initializing test .."
+	#echo "Initializing test .."
 	#cleanup
 
 	shutdown_vm $RPVM_PT
@@ -923,7 +923,7 @@ if [ $mode != "bm" ]; then
 fi
 rp_irq_affinity $cpu_affinity
 setup_dp_profile $mode $dp_profile
-echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
+echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
