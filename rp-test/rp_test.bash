@@ -529,12 +529,8 @@ cleanup() {
 	logCMD "ssh $RP iptables -t nat -F"
 
 	#ovs
-	# XXX Some issue with the OVS in the docker image, ignore this for BM for now
-	if [ $mode != "bm" ]
-	then
-		log "Clean OVS flows"
-		logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
-	fi
+	log "Clean OVS flows"
+	logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
 
 	logCMD "ssh $RP tc filter del dev $RP_PRIV_LEG_DEV parent ffff: > /dev/null 2>&1"
 	logCMD "ssh $RP tc filter del dev $RP_PUB_LEG_DEV parent ffff: > /dev/null 2>&1"
@@ -832,12 +828,12 @@ then
 
 	setup
 
-	echo "Initializing test .."
+	#echo "Initializing test .."
 	#cleanup
 
 	shutdown_vm $RPVM_PT
 	shutdown_vm $RPVM_SRIOV
-	shutdown_container $RPVM_CONTAINER
+	# shutdown_container $RPVM_CONTAINER
 
 	# Set profile
 	# Check for OFED?
@@ -877,18 +873,25 @@ fi
 
 if [ $mode = "pt" ] ; then
 	RPVM=$RPVM_PT
+	RP_PRIV_LEG_DEV=$RP_PRIV_LEG_DEV_VM
+	RP_PUB_LEG_DEV=$RP_PUB_LEG_DEV_VM
 elif [ $mode = "sriov" ] ; then
 	RPVM=$RPVM_SRIOV
+	RP_PRIV_LEG_DEV=$RP_PRIV_LEG_DEV_VM
+	RP_PUB_LEG_DEV=$RP_PUB_LEG_DEV_VM
 elif [ $mode = "bm" ] ; then
+	RP=$RP_BM
 	RPVM=$RPVM_CONTAINER
+	RP_PRIV_LEG_DEV=$RP_PRIV_LEG_DEV_BM
+	RP_PUB_LEG_DEV=$RP_PUB_LEG_DEV_BM
 else
 	echo "unknown mode $mode, quitting.. "
 	exit
 fi
 if [ $mode = "bm" ] ; then
-	startup_container $RPVM
+	#startup_container $RPVM
 	# Save the iptable rules before anything else
-	ssh $RP "iptables-save > /root/working.iptables.rules"
+	ssh $RP "iptables-save > /root/working.iptables.rules.$$"
 else
 	startup_vm $RPVM
 fi
@@ -898,11 +901,11 @@ if [ $RPVM != $RPVM_CONTAINER ]; then
 	log "Dominfo $VM "
 	log "========================================="
 	logCMD "virsh dominfo $VM"
-else
-	log ""
-	log "Container $VM "
-	log "========================================="
-	logCMD "docker inspect $VM"
+#else
+#	log ""
+#	log "Container $VM "
+#	log "========================================="
+#	logCMD "docker inspect $VM"
 fi
 log_before $RPVM
 setup_vm $RPVM
@@ -910,17 +913,17 @@ setup_vm $RPVM
 # XXX mlnx_tune has some issues with 
 # "AttributeError: 'NoneType' object has no attribute 'report_status'"
 # when run in the SRIOV VM.
-if [ $profile != "NONE" -a $mode = "pt" ] ; then
+if [ $profile != "NONE" -a $mode != "sriov" ] ; then
 	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
 fi
 
-#XXX not clear about how to pin in a docker.
+#XXX not clear about pinning on the host
 if [ $mode != "bm" ]; then
 	host_vm_cpu_binding $cpu_binding
 fi
 rp_irq_affinity $cpu_affinity
 setup_dp_profile $mode $dp_profile
-echo "Running test $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
+echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
@@ -929,7 +932,7 @@ runMetrics $mode
 
 # Restore iptable rules, if any
 if [ $mode = "bm" ] ; then
-	ssh $RP "iptables-restore < /root/working.iptables.rules"
+	ssh $RP "iptables-restore < /root/working.iptables.rules.$$"
 fi
 exit
 
