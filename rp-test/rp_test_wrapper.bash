@@ -36,13 +36,15 @@ RUNS=rp_test.runs
 #PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
 #DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload"
 #NUM_SESSIONS="100 500 1000"
+#CPU_AFFINITIES="4 8"
+#CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
 MODES="bm"
-PROFILES="NONE"
-CPU_BINDINGS="pinned"
+PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS"
+CPU_BINDINGS="dangling"
 CPU_AFFINITIES="4 8"
-DATAPATHS="linux_fwd"
+DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct"
 NUM_SESSIONS="100"
 BANDWIDTH_PER_SESSION=100m
 
@@ -75,25 +77,21 @@ LOGDIR=$1
 D=`date +%b-%d-%Y`
 LOGDIR+=_$$
 LOGDIR+=_$D
-mkdir -p $LOGDIR
+mkdir -p $LOGDIR >/dev/null 2>&1
 outline_all > $LOGDIR/$RUNS
 shift
 CASES=$@
 if [ $CASES = "all" ] ; then
 	CASES=`grep case $LOGDIR/$RUNS | awk '{print $1}'`
 fi
-echo $CASES
+#echo $CASES
 
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
-	echo $args
-	bash -x rp_test.bash $LOGDIR $args
+	# echo $args
+	bash rp_test.bash $LOGDIR $args
 done
 
 echo "Tar'ing $LOGDIR as $LOGDIR.tar.gz"
 tar -czf $LOGDIR.tar.gz $LOGDIR > /dev/null 2>&1
-
-
-
-
-
+rm -rf $LOGDIR > /dev/null 2>&1
