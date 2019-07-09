@@ -3,11 +3,14 @@
 set -u
 set -e
 
-clear
+echo ""
+echo ""
+echo ""
+echo ""
 
 SCANDIR=${1:?Missing result dir as argument}
 
-for DIR in `ls -d $SCANDIR/*/` ; do
+for DIR in `ls -tr -d $SCANDIR/*/` ; do
 	DEVS=`ls $DIR/*.tput | xargs -r -l basename`
 	D=`basename $DIR`
 	echo $D
