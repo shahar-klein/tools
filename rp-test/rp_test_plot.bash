@@ -72,8 +72,8 @@ plotLogs() {
 			# Range assuming 5-15Gbps
 			set yrange [625000000:1875000000]
 			set label 1 'Bytes/sec' at graph .3,.1
-			set label 2 '[RX Avg : $rxavgbwps MBps / $rxavgbwbps Mbps]' at graph 0.005,.875
-			set label 3 '[TX Avg : $txavgbwps MBps / $txavgbwbps Mbps]' at graph 0.005,.825
+			set label 2 '[RX Avg : $rxavgbwbps Mbps]' at graph 0.005,.875
+			set label 3 '[TX Avg : $txavgbwbps Mbps]' at graph 0.005,.825
 			set ylabel "Bandwidth : Range 0.625 - 1.875 GB/s [5 - 15 Gb/sec]"
 			plot "$testdir/${RP_PRIV_LEG_DEV}.tput" using 1:2 with lines title "RX Bytes", \
 				"$testdir/${RP_PUB_LEG_DEV}.tput" using 1:2 with lines title "TX Bytes"
@@ -93,51 +93,31 @@ plotLogs() {
 	if [ $cpu_plot -eq 1 ] ; then
 		gnuplot -persist <<-EOFMarker
 			set title noenhanced
-			set multiplot layout 4,2 rowsfirst title "$title"
+			set multiplot layout 10,2 rowsfirst title "$title"
 			set yrange [0:100]
+			plot "${testdir}/0.util" using 1:2 with lines title "CPU 0"
 			plot "${testdir}/1.util" using 1:2 with lines title "CPU 1"
 			plot "${testdir}/2.util" using 1:2 with lines title "CPU 2"
 			plot "${testdir}/3.util" using 1:2 with lines title "CPU 3"
 			plot "${testdir}/4.util" using 1:2 with lines title "CPU 4"
-	
-			# Use for instead of explicitly going over the list
-			set yrange [0:100]
 			plot "${testdir}/5.util" using 1:2 with lines title "CPU 5"
 			plot "${testdir}/6.util" using 1:2 with lines title "CPU 6"
 			plot "${testdir}/7.util" using 1:2 with lines title "CPU 7"
 			plot "${testdir}/8.util" using 1:2 with lines title "CPU 8"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 9"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 10"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 11"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 12"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 13"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 14"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 15"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 16"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 17"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 18"
+			plot "${testdir}/1.util" using 1:2 with lines title "CPU 19"
 			unset multiplot
 		EOFMarker
 	fi
-	# Plot the guest CPU info from the host
-#	gnuplot -persist <<-EOFMarker
-#		set multiplot layout 1,2 rowsfirst title "Test #$test2plot"
-#		set label 1 'Host % utilization' at graph .3,0.2
-#		set yrange [0:100]
-#		# Use for instead of explicitly going over the list
-#		plot "${testdir}/1.util" using 1:2 with lines title "CPU 1", \
-#			"${testdir}/2.util" using 1:2 with lines title "CPU 2", \
-#			"${testdir}/3.util" using 1:2 with lines title "CPU 3", \
-#			"${testdir}/4.util" using 1:2 with lines title "CPU 4", \
-#			"${testdir}/5.util" using 1:2 with lines title "CPU 5", \
-#			"${testdir}/6.util" using 1:2 with lines title "CPU 6", \
-#			"${testdir}/7.util" using 1:2 with lines title "CPU 7", \
-#			"${testdir}/8.util" using 1:2 with lines title "CPU 8"
-#
-#
-#		set label 1 'Guest % utilization' at graph .3,0.2
-#		# Use for instead of explicitly going over the list
-#		set yrange [0:100]
-#		plot "${testdir}/1.guest" using 1:2 with lines title "CPU 1", \
-#			"${testdir}/2.guest" using 1:2 with lines title "CPU 2", \
-#			"${testdir}/3.guest" using 1:2 with lines title "CPU 3", \
-#			"${testdir}/4.guest" using 1:2 with lines title "CPU 4", \
-#			"${testdir}/5.guest" using 1:2 with lines title "CPU 5", \
-#			"${testdir}/6.guest" using 1:2 with lines title "CPU 6", \
-#			"${testdir}/7.guest" using 1:2 with lines title "CPU 7", \
-#			"${testdir}/8.guest" using 1:2 with lines title "CPU 8"
-#		unset multiplot
-#	EOFMarker
 
 }
 
