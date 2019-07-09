@@ -394,6 +394,7 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
+	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
 	logCMD "ssh $RP ovs-ofctl del-flows $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
@@ -683,9 +684,8 @@ runMetrics() {
 	nic_mode=$1
 	collectBWLogs $nic_mode &
 	P2KILL+="$! "
-	for ((cpus=0;cpus<NUM_CPUS;cpus++))
+	for ((cpu=0;cpu<$TOTAL_CPUS;cpu++))
 	do
-		cpu=$((CPU_START+cpus))
 		collectCPULogs $cpu &
 		P2KILL+="$! "
 
@@ -824,7 +824,7 @@ if [ $RUN_TESTS = "yes" ]
 then
 	#set up the test env according to the input:
 	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}
-	mkdir -v -p $LOGDIR
+	mkdir -v -p $LOGDIR > /dev/null 2>&1
 
 	setup
 
@@ -888,11 +888,7 @@ else
 	echo "unknown mode $mode, quitting.. "
 	exit
 fi
-if [ $mode = "bm" ] ; then
-	#startup_container $RPVM
-	# Save the iptable rules before anything else
-	ssh $RP "iptables-save > /root/working.iptables.rules.$$"
-else
+if [ $mode != "bm" ] ; then
 	startup_vm $RPVM
 fi
 cleanup $mode
@@ -930,10 +926,6 @@ runMetrics $mode
 #tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 #cleanup
 
-# Restore iptable rules, if any
-if [ $mode = "bm" ] ; then
-	ssh $RP "iptables-restore < /root/working.iptables.rules.$$"
-fi
 exit
 
 if [ $DISPLAY_TESTS = "yes" ]
