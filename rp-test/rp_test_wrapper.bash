@@ -86,12 +86,14 @@ if [ $CASES = "all" ] ; then
 fi
 #echo $CASES
 
+iptables-save > $LOGDIR/working.iptables.rules.$$
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
 	# echo $args
 	bash rp_test.bash $LOGDIR $args
 done
-
-echo "Tar'ing $LOGDIR as $LOGDIR.tar.gz"
-tar -czf $LOGDIR.tar.gz $LOGDIR > /dev/null 2>&1
+iptables-restore < $LOGDIR/working.iptables.rules.$$
+rm $LOGDIR/working.iptables.rules.$$
+echo "Taring $LOGDIR as ${LOGDIR}.tar.gz"
+tar -czf ${LOGDIR}.tar.gz $LOGDIR > /dev/null 2>&1
 rm -rf $LOGDIR > /dev/null 2>&1
