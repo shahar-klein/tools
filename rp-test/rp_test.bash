@@ -710,6 +710,11 @@ host_vm_cpu_binding() {
 # XXX Fixme. The ssh below seems to have a couple of issues
 rp_irq_affinity() {
 	affinity_mode=$1
+
+	set +e
+	ssh $RP systemctl status irqbalance > /dev/null 2>&1
+	set -e
+
 	# Set the # of channels
 	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode > /dev/null 2>&1
 	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode > /dev/null 2>&1
@@ -719,6 +724,17 @@ rp_irq_affinity() {
 	else
 		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+	fi
+	#Verify
+	PRIV_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity' | wc -l`
+	PUB_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity' | wc -l`
+	if [ $PRIV_INT_VERIFY -ne $affinity_mode -o $PUB_INT_VERIFY -ne $affinity_mode ] ; then 
+		echo "ERROR: Can't verify irq affinity"
+		set -x
+		ssh $RP cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity'
+		ssh $RP cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity'
+		set +x
+		exit 6
 	fi
 }
 
