@@ -120,7 +120,35 @@ plotLogs() {
 	fi
 
 }
+quick_scan_results_dir() {
 
+	echo ""
+	echo ""
+	echo ""
+	echo ""
+	
+	SCANDIR=${1:?Missing result dir as argument}
+	
+	for DIR in `ls -tr -d $SCANDIR/*/` ; do
+		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		D=`basename $DIR`
+		echo $D
+		for DEV in $DEVS ; do
+			DEVP=`echo $DEV| cut -f1 -d.`
+			echo -n $DEVP":"
+			cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
+		done
+		cat $DIR/*.idle |  awk '{sum+=$2} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
+		cat $DIR/*.guest |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
+		cat $DIR/*.dropped | awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDropps/Errors: "sum "\033[37m"} }'
+		echo ""
+	done
+}
+
+if [ $1 = "quick" ] ; then
+	shift
+	quick_scan_results_dir $@
+fi
 
 #plotLogs  case_1_11912_Jun-30-2019 pt_IP_FORWARDING_MULTI_STREAM_0_LOSS_pinned_4_linux_fwd_100 [cpu|bw]
 #plotLogs case_1_11912_Jun-30-2019 match linux_fwd_100 [cpu|bw]
