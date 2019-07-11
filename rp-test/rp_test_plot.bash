@@ -148,6 +148,7 @@ quick_scan_results_dir() {
 if [ $1 = "quick" ] ; then
 	shift
 	quick_scan_results_dir $@
+	exit 0
 fi
 
 #plotLogs  case_1_11912_Jun-30-2019 pt_IP_FORWARDING_MULTI_STREAM_0_LOSS_pinned_4_linux_fwd_100 [cpu|bw]
