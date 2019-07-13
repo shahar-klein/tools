@@ -380,6 +380,9 @@ setup_vm() {
 
 	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc toeplitz"
 	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc toeplitz"
+
+	logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV gro off"
+	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV gro off"
 }
 
 setup_vm_ovs() {
@@ -396,11 +399,9 @@ setup_vm_ovs() {
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
 	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
-	logCMD "ssh $RP ovs-ofctl del-flows $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
 
 	logCMD "ssh $RP ovs-vsctl add-br $BRPUB"
-	logCMD "ssh $RP ovs-ofctl del-flows $BRPUB"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPUB $RP_PUB_LEG_DEV"
 
 	flush_ip_dev $RP $RP_PRIV_LEG_DEV
@@ -428,29 +429,19 @@ setup_vm_ovs() {
 	# Create patch ports
 	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_PATCH_PORT -- set interface $RP_PRIV_PATCH_PORT type=patch options:peer=$RP_PUB_PATCH_PORT"
 	logCMD "ssh $RP ovs-vsctl add-port $BRPUB $RP_PUB_PATCH_PORT -- set interface $RP_PUB_PATCH_PORT type=patch options:peer=$RP_PRIV_PATCH_PORT"
-
-	# Add ARP to the priv bridge
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPRIV priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPRIV priority=10,in_port=$BRPRIV,arp,action=normal"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPRIV priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop"
-	
-	
-	# Add ARP to the pub bridge
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPUB priority=10,in_port=$RP_PUB_LEG_DEV,arp,action=normal"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPUB priority=10,in_port=$BRPUB,arp,action=normal"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop"
-	logCMD "ssh $RP ovs-ofctl add-flow $BRPUB priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop"
 }
 
 
-log_before() {
+log_run() {
 	local VM=$1
+	local test=$2
+	local when=$3
 
 	# We already have the IP.
 	# local RP=`virsh domifaddr $VM | grep ipv4 | awk '{print $4}'| cut -d"/" -f1`
+
+	log ""
+	log "Test: $test: $when" 
 
 	log ""
 	log "PRIV LEG NIC Stats $RP $RP_PRIV_LEG_DEV"
@@ -738,6 +729,12 @@ rp_irq_affinity() {
 	fi
 }
 
+setup_buffer_size() {
+	buffer_size=$1
+	logCMD "ssh $RP ethtool -G $RP_PRIV_LEG_DEV rx $buffer_size"
+	logCMD "ssh $RP ethtool -G $RP_PUB_LEG_DEV tx $buffer_size"
+}
+
 linux_forward_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
 	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
@@ -919,14 +916,19 @@ if [ $RPVM != $RPVM_CONTAINER ]; then
 #	log "========================================="
 #	logCMD "docker inspect $VM"
 fi
-log_before $RPVM
+log_run $RPVM ${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}_${BW_PER_SESSION} "Before"
 setup_vm $RPVM
 
 # XXX mlnx_tune has some issues with 
 # "AttributeError: 'NoneType' object has no attribute 'report_status'"
 # when run in the SRIOV VM.
-if [ $profile != "NONE" -a $mode != "sriov" ] ; then
-	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+#if [ $profile != "NONE" -a $mode != "sriov" ] ; then
+#	ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
+#fi
+
+# it is 1024 by default
+if [ $profile -ne 1024 ]; then
+	setup_buffer_size $profile
 fi
 
 #XXX not clear about pinning on the host
@@ -942,6 +944,7 @@ runMetrics $mode
 #tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
 #cleanup
 
+log_run $RPVM ${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}_${BW_PER_SESSION} "After"
 exit
 
 if [ $DISPLAY_TESTS = "yes" ]
@@ -987,7 +990,7 @@ do
 			mkdir -p $LOGDIR
 			startup_vm $RPVM
 			cleanup $mode
-			log_before
+			log_run
 			setup_vm
 			# XXX mlnx_tune has some issues with 
 			# "AttributeError: 'NoneType' object has no attribute 'report_status'"
@@ -1106,4 +1109,4 @@ then
 	# echo "Plotting $PLOT_DIR $LOGDIR $TEST_TO_PLOT"
 	plotLogs $PLOT_DIR $LOGDIR $TEST_TO_PLOT
 fi
-#log_before
+#log_run
