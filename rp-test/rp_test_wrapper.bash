@@ -40,24 +40,25 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="bm"
-PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS"
-CPU_BINDINGS="dangling"
+MODES="pt"
+PROFILES="NONE"
+BUFFER_SIZE="1024 4096 8192"
+CPU_BINDINGS="dangling pinned"
 CPU_AFFINITIES="4 8"
 DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct"
-NUM_SESSIONS="100"
-BANDWIDTH_PER_SESSION=100m
+NUM_SESSIONS="500"
+BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
 	CASE=0
 	for m in $MODES ; do
-		for p in $PROFILES ; do
+		for bs in $BUFFER_SIZE ; do
 			for b in $CPU_BINDINGS ; do
 				for a in $CPU_AFFINITIES ; do
 					for d in $DATAPATHS ; do
 						for n in $NUM_SESSIONS ; do
 							CASE=$((CASE+1))
-							echo case_${CASE} $m $p $b $a $d $n $BANDWIDTH_PER_SESSION
+							echo case_${CASE} $m $bs $b $a $d $n $BANDWIDTH_PER_SESSION
 						done
 					done
 				done

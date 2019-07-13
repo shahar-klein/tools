@@ -1,2 +1,12 @@
-case_1 bm NONE pinned 4 linux_fwd 100 100m
-case_2 bm NONE pinned 8 linux_fwd 100 100m
+case_1 pt 1024 dangling 4 ovs_fwd 500 20m
+case_2 pt 1024 dangling 8 ovs_fwd 500 20m
+case_3 pt 1024 pinned 4 ovs_fwd 500 20m
+case_4 pt 1024 pinned 8 ovs_fwd 500 20m
+case_5 pt 4096 dangling 4 ovs_fwd 500 20m
+case_6 pt 4096 dangling 8 ovs_fwd 500 20m
+case_7 pt 4096 pinned 4 ovs_fwd 500 20m
+case_8 pt 4096 pinned 8 ovs_fwd 500 20m
+case_9 pt 8192 dangling 4 ovs_fwd 500 20m
+case_10 pt 8192 dangling 8 ovs_fwd 500 20m
+case_11 pt 8192 pinned 4 ovs_fwd 500 20m
+case_12 pt 8192 pinned 8 ovs_fwd 500 20m
