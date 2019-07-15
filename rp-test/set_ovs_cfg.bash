@@ -117,21 +117,15 @@ RP_PRIV_PATCH_PORT=$6
 RP_PUB_PATCH_PORT=$7
 
 
-if [ -f /tmp/flows.${BRPUB}.$$ ]; then
-	rm -f /tmp/flows.${BRPUB}.$$
-fi
-if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
-	rm -f /tmp/flows.${BRPRIV}.$$
-fi
-echo "del-flows" >> /tmp/flows.${BRPRIV}.$$
-echo "del-flows" >> /tmp/flows.{BRPUB}.$$
+echo "del-flows" > /tmp/flows.${BRPRIV}.$$
+echo "del-flows" > /tmp/flows.${BRPUB}.$$
 
 #Add ARP rules
-echo "priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal" > /tmp/flows.${BRPRIV}.$$
-echo "priority=10,in_port=$BRPRIV,arp,action=normal" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" > /tmp/flows.${BRPRIV}.$$
+echo "priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=10,in_port=$BRPRIV,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPRIV}.$$
        
        
 # Add ARP to the pub bridge
