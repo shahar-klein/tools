@@ -116,22 +116,20 @@ RP_PUB_LEG_DEV=$5
 RP_PRIV_PATCH_PORT=$6
 RP_PUB_PATCH_PORT=$7
 
+if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
+	rm -f /tmp/flows.${BRPRIV}.$$
+fi
 
 if [ -f /tmp/flows.${BRPUB}.$$ ]; then
 	rm -f /tmp/flows.${BRPUB}.$$
 fi
-if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
-	rm -f /tmp/flows.${BRPRIV}.$$
-fi
-echo "del-flows" >> /tmp/flows.${BRPRIV}.$$
-echo "del-flows" >> /tmp/flows.{BRPUB}.$$
 
 #Add ARP rules
-echo "priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal" > /tmp/flows.${BRPRIV}.$$
-echo "priority=10,in_port=$BRPRIV,arp,action=normal" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" > /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" > /tmp/flows.${BRPRIV}.$$
+echo "priority=10,in_port=$RP_PRIV_LEG_DEV,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=10,in_port=$BRPRIV,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPRIV}.$$
+echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPRIV}.$$
        
        
 # Add ARP to the pub bridge
@@ -153,5 +151,10 @@ case  $mode in
 		ovs_forward_ct_setup $@
 		;;
 esac
+
+# XXX Check if we can add these to the file as well.
+ovs-ofctl del-flows ${BRPRIV}
+ovs-ofctl del-flows ${BRPUB}
+
 ovs-ofctl add-flows ${BRPRIV} /tmp/flows.${BRPRIV}.$$
 ovs-ofctl add-flows ${BRPUB} /tmp/flows.${BRPUB}.$$
