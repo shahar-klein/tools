@@ -558,15 +558,23 @@ collectCPULogs() {
 	# Idle %age
 	for (( dur=1; dur<=$LOG_DURATION; dur++ ))
 	do
-		output=`mpstat -P $cpu $sleep_duration 1| tail -1 | tr -s " " | cut -d " " -f10,12`
-		idle=`echo $output | cut -d " " -f2 | cut -d"." -f1`
-		guest=`echo $output | cut -d " " -f1`
-		util=$((100-idle))
-		echo $dur $idle >> $LOGDIR/${cpu}.idle
-		echo $dur $util >> $LOGDIR/${cpu}.util
-		echo $dur $guest >> $LOGDIR/${cpu}.guest
+		output=`mpstat -P $cpu $sleep_duration 1| tail -1 | tr -s " " | cut -d " " -f5,10,12`
+		#sys=`echo $output | cut -d " " -f1 | cut -d"." -f1`
+		#guest=`echo $output | cut -d " " -f2 | cut -d"." -f1` 
+		#idle=`echo $output | cut -d " " -f3 | cut -d"." -f1`
+		#util=$((100-idle))
+		#echo $sys, $guest, $idle, $util
+		#echo $dur $idle >> $LOGDIR/${cpu}.idle
+		#echo $dur $sys >> $LOGDIR/${cpu}.sys
+		#echo $dur $util >> $LOGDIR/${cpu}.util
+		#echo $dur $guest >> $LOGDIR/${cpu}.guest
+		echo $output >> $LOGDIR/${cpu}.info
 	done
-}	
+	#cat $LOGDIR/${cpu}.info | while read s g i
+	#do
+	#	echo $s $g $i
+	#done
+}
 
 collectBWLogs() {
 	nic_mode=$1
