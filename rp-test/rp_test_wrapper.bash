@@ -40,13 +40,13 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="pt"
+MODES="sriov"
 PROFILES="NONE"
-BUFFER_SIZE="1024 4096 8192"
-CPU_BINDINGS="dangling pinned"
-CPU_AFFINITIES="4 8"
-DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct"
-NUM_SESSIONS="500"
+BUFFER_SIZE="1024"
+CPU_BINDINGS="dangling"
+CPU_AFFINITIES="4"
+DATAPATHS="linux_fwd"
+NUM_SESSIONS="1000"
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
