@@ -23,16 +23,6 @@ else
 	txbytes="tx_vport_unicast_bytes:"
 fi
 
-BASE_RX_BYTES=`ethtool -S $RP_PRIV_LEG_DEV | grep $rxbytes | awk '{print  $2}'`
-BASE_TX_BYTES=`ethtool -S $RP_PUB_LEG_DEV | grep $txbytes | awk '{print  $2}'`
-BASE_RX_DROPPED=`ethtool -S $RP_PRIV_LEG_DEV | grep "rx_out_of_buffer:" | awk '{print  $2}'`
-BASE_TX_DROPPED=`ethtool -S $RP_PUB_LEG_DEV | grep "tx_queue_dropped:" | awk '{print  $2}'`
-
-echo $BASE_RX_BYTES  > $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV}.tput
-echo $BASE_TX_BYTES > $RESULTS_LOG_DIR/${RP_PUB_LEG_DEV}.tput
-echo $BASE_RX_DROPPED > $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV}.dropped
-echo $BASE_TX_DROPPED > $RESULTS_LOG_DIR/${RP_PUB_LEG_DEV}.dropped
-
 for (( dur=1; dur<=$DURATION; dur++ ))
 do
 
