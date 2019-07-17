@@ -132,16 +132,24 @@ quick_scan_results_dir() {
 	for DIR in `ls -tr -d $SCANDIR/*/` ; do
 		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
 		D=`basename $DIR`
-		echo $D
+		echo $D:
+		echo -n "  "
 		for DEV in $DEVS ; do
 			DEVP=`echo $DEV| cut -f1 -d.`
-			echo -n $DEVP":"
-			cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
+			echo -n "$DEVP:"
+			START=`cat $DIR/$DEV | head -n1 | awk '{print $2}'`
+			END=`cat $DIR/$DEV | tail -n1 | awk '{print $2}'`
+			LINES=`wc -l $DIR/$DEV | awk '{print $1}'`
+			BW=`bc <<< "scale=2;($END-$START)*8/($LINES*1000000000)"`
+			echo -n -e "\e[32m$BW\e[37m"
+			echo -n " Gbit/s.  " 
+
+			#cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
 		done
-		cat $DIR/*.idle |  awk '{sum+=$2} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
-		cat $DIR/*.guest |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
-		cat $DIR/*.dropped | awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDropps/Errors: "sum "\033[37m"} }'
-		echo ""
+		cat $DIR/*.info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
+		cat $DIR/*.info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
+		cat $DIR/*.info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
+		for f in `ls $DIR/*.dropped` ; do cat $f| tail -n1; done |  awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
 	done
 }
 
