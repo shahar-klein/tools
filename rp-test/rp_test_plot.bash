@@ -146,9 +146,9 @@ quick_scan_results_dir() {
 
 			#cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
 		done
-		cat $DIR/*.info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
-		cat $DIR/*.info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
-		cat $DIR/*.info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
+		cat $DIR/[1-8].info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
+		cat $DIR/[1-8].info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
+		cat $DIR/[1-8].info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
 		for f in `ls $DIR/*.dropped` ; do cat $f| tail -n1; done |  awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
 	done
 }
