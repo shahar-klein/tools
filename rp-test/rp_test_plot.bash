@@ -120,6 +120,54 @@ plotLogs() {
 	fi
 
 }
+
+report_csv() {
+	SCANDIR=${1:?Missing result dir as argument}
+
+	for DIR in `ls -tr -d $SCANDIR/*/` ; do
+		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		D=`basename $DIR`
+		FN=./$D.csv
+		echo $D > $FN
+		LINES=`wc -l $DIR/0.info | awk '{print $1}'`
+		echo -n "Sample," >> $FN
+		for i in $(seq 0 $LINES); do
+			echo -n $i, >> $FN
+		done
+		echo >> $FN
+
+		for DEV in $DEVS ; do
+			DEVP=`echo $DEV| cut -f1 -d.`
+			echo -n "$DEVP," >> $FN
+			cat $DIR/$DEV | awk 'NR>1{printf "%d,", $2-p} {p=$2}' >> $FN
+			echo >> $FN
+			echo -n "$DEVP dropped," >> $FN
+			cat $DIR/$DEVP.dropped  | awk 'NR>1{printf "%d,", $2-p} {p=$2}' >> $FN
+			echo >> $FN
+		done
+
+		#sys guest idle
+		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
+			CPU=`basename $f| cut -f1 -d.`
+			echo -n "cpu-$CPU idle," >> $FN
+			cat $f | awk '{printf "%s,", $3}' >> $FN
+			echo >> $FN
+		done
+		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
+			CPU=`basename $f| cut -f1 -d.`
+			echo -n "cpu-$CPU sys," >> $FN
+			cat $f | awk '{printf "%s,", $1}' >> $FN
+			echo >> $FN
+		done
+		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
+			CPU=`basename $f| cut -f1 -d.`
+			echo -n "cpu-$CPU guest," >> $FN
+			cat $f | awk '{printf "%s,", $2}' >> $FN
+			echo >> $FN
+		done
+	done
+}
+
 quick_scan_results_dir() {
 
 	echo ""
@@ -156,6 +204,12 @@ quick_scan_results_dir() {
 if [ $1 = "quick" ] ; then
 	shift
 	quick_scan_results_dir $@
+	exit 0
+fi
+
+if [ $1 = "csv" ] ; then
+	shift
+	report_csv $@
 	exit 0
 fi
 
