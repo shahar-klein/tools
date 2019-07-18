@@ -213,7 +213,7 @@ quick_scan_results_dir() {
 		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
 		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
 		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
-		for f in `ls $DIR/*.dropped` ; do cat $f| tail -n1; done |  awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
+		for f in `ls -1 $DIR/*.dropped` ; do awk 'NR==1 {a=$2} ; END{print $2-a}' $f ; done | awk '{sum+=$1} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
 	done
 }
 
