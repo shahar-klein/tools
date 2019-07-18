@@ -739,8 +739,10 @@ rp_irq_affinity() {
 
 setup_buffer_size() {
 	buffer_size=$1
+	set +e
 	logCMD "ssh $RP ethtool -G $RP_PRIV_LEG_DEV rx $buffer_size"
 	logCMD "ssh $RP ethtool -G $RP_PUB_LEG_DEV tx $buffer_size"
+	set -e
 }
 
 linux_forward_setup() {
