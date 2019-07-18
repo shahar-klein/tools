@@ -138,10 +138,15 @@ report_csv() {
 
 		for DEV in $DEVS ; do
 			DEVP=`echo $DEV| cut -f1 -d.`
-			echo -n "$DEVP," >> $FN
-			cat $DIR/$DEV | awk 'NR>1{printf "%d,", $2-p} {p=$2}' >> $FN
+			set +e
+			DIRECTION=TX
+			grep $DEVP ./rp_test.config | grep -q PRIV && DIRECTION=RX
+			set -e
+
+			echo -n "$DEVP-$DIRECTION Gbit/s," >> $FN
+			cat $DIR/$DEV | awk 'NR>1{printf "%.2f,", ($2-p)*8/1000000000} {p=$2}' >> $FN
 			echo >> $FN
-			echo -n "$DEVP dropped," >> $FN
+			echo -n "$DEVP packet dropped," >> $FN
 			cat $DIR/$DEVP.dropped  | awk 'NR>1{printf "%d,", $2-p} {p=$2}' >> $FN
 			echo >> $FN
 		done
@@ -149,20 +154,8 @@ report_csv() {
 		#sys guest idle
 		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
 			CPU=`basename $f| cut -f1 -d.`
-			echo -n "cpu-$CPU idle," >> $FN
-			cat $f | awk '{printf "%s,", $3}' >> $FN
-			echo >> $FN
-		done
-		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
-			CPU=`basename $f| cut -f1 -d.`
-			echo -n "cpu-$CPU sys," >> $FN
-			cat $f | awk '{printf "%s,", $1}' >> $FN
-			echo >> $FN
-		done
-		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
-			CPU=`basename $f| cut -f1 -d.`
-			echo -n "cpu-$CPU guest," >> $FN
-			cat $f | awk '{printf "%s,", $2}' >> $FN
+			echo -n "cpu-$CPU Total," >> $FN
+			cat $f | awk '{printf "%.2f,", (100-$3)}' >> $FN
 			echo >> $FN
 		done
 	done
