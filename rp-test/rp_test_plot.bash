@@ -120,6 +120,67 @@ plotLogs() {
 	fi
 
 }
+
+report_csv() {
+	SCANDIR=${1:?Missing result dir as argument}
+
+	for DIR in `ls -tr -d $SCANDIR/*/` ; do
+		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		D=`basename $DIR`
+		FN=./$D.csv
+		echo $D > $FN
+		LINES=`wc -l $DIR/0.info | awk '{print $1}'`
+		echo -n "Sample," >> $FN
+		for i in $(seq 0 $LINES); do
+			echo -n $i, >> $FN
+		done
+		echo >> $FN
+
+		for DEV in $DEVS ; do
+			DEVP=`echo $DEV| cut -f1 -d.`
+			set +e
+			DIRECTION=TX
+			grep $DEVP ./rp_test.config | grep -q PRIV && DIRECTION=RX
+			set -e
+
+			echo -n "$DEVP-$DIRECTION Gbit/s," >> $FN
+			cat $DIR/$DEV | awk 'NR>1{printf "%.2f,", ($2-p)*8/1000000000} {p=$2}' >> $FN
+			echo >> $FN
+			echo -n "$DEVP packet dropped," >> $FN
+			cat $DIR/$DEVP.dropped  | awk 'NR>1{printf "%d,", $2-p} {p=$2}' >> $FN
+			echo >> $FN
+		done
+
+		#sum CPUs
+
+		CPU_BEGIN=$CPU_START
+		CPU_END=$NUM_CPUS
+		TYPE="VM($CPU_BEGIN-$CPU_END)"
+		echo $D | grep -q bm && CPU_BEGIN=0 && CPU_END=$((TOTAL_CPUS-1)) && TYPE="BM($CPU_BEGIN-$CPU_END)"
+		echo -n "CPU $TYPE Total," >> $FN
+		LINES=`wc -l $DIR/0.info | awk '{print $1}'`
+		for i in $(seq 1 $LINES); do
+			CPUV=0
+			for j in $(seq $CPU_BEGIN $CPU_END) ; do
+				CPUF=$DIR/$j.info
+				V=`awk -v L="$i" 'NR == L {print 100-$3}' $CPUF`
+				CPUV=`bc <<< "scale=2;$CPUV + $V"`
+			done
+			CPUV=`bc <<< "scale=2;$CPUV/8"`
+			echo -n "$CPUV," >> $FN
+		done
+		echo >> $FN
+
+		#sys guest idle
+		for f in `ls -1 $DIR/*.info | sort -t/ +3 -n` ; do
+			CPU=`basename $f| cut -f1 -d.`
+			echo -n "cpu-$CPU Total," >> $FN
+			cat $f | awk '{printf "%.2f,", (100-$3)}' >> $FN
+			echo >> $FN
+		done
+	done
+}
+
 quick_scan_results_dir() {
 
 	echo ""
@@ -146,16 +207,25 @@ quick_scan_results_dir() {
 
 			#cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
 		done
-		cat $DIR/*.info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
-		cat $DIR/*.info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
-		cat $DIR/*.info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
-		for f in `ls $DIR/*.dropped` ; do cat $f| tail -n1; done |  awk '{sum+=$2} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
+		CPU_BEGIN=$CPU_START
+		CPU_END=$NUM_CPUS
+		echo $D | grep -q bm && CPU_BEGIN=0 && CPU_END=$((TOTAL_CPUS-1))
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$3} END {printf("Total CPU Usage: %.2f%. ", 100-sum/NR)}'
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$2} END {printf("Guest CPU Usage: %.2f%. ", sum/NR)}'
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$1} END {printf("Sys CPU Usage: %.2f%. ", sum/NR)}'
+		for f in `ls -1 $DIR/*.dropped` ; do awk 'NR==1 {a=$2} ; END{print $2-a}' $f ; done | awk '{sum+=$1} END {if ( sum > 0 ) {print "\033[31m Dropps/Errors: "sum "\033[37m"} else {print "\033[32mDrops/Errors: "sum "\033[37m"} }'
 	done
 }
 
 if [ $1 = "quick" ] ; then
 	shift
 	quick_scan_results_dir $@
+	exit 0
+fi
+
+if [ $1 = "csv" ] ; then
+	shift
+	report_csv $@
 	exit 0
 fi
 
