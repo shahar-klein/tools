@@ -600,13 +600,17 @@ collectCPULogs() {
 collectBWLogs() {
 	nic_mode=$1
 
-	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp $nic_mode
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_LEG_DEV_HA $RP_PUB_LEG_DEV_HA /tmp $nic_mode
 
  
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV_HA}.tput $LOGDIR/${RP_PRIV_LEG_DEV_HA}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV_HA}.tput $LOGDIR/${RP_PUB_LEG_DEV_HA}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV_HA}.dropped $LOGDIR/${RP_PRIV_LEG_DEV_HA}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV_HA}.dropped $LOGDIR/${RP_PUB_LEG_DEV_HA}.dropped > /dev/null 2>&1
 
 }
 
