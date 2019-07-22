@@ -396,13 +396,16 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ovs-vsctl set open . other-config:hw-offload=true"
 		logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV hw-tc-offload on"
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
+		if [ $nic_mode = "ha" ]; then
+			logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV_HA hw-tc-offload on"
+			logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV_HA hw-tc-offload on"
+		fi
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
 	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
 	logCMD "ssh $RP ovs-vsctl add-br $BRPUB"
 
-	set -x
 	if [ $nic_mode = "ha" ]; then
 		logCMD "ssh $RP ovs-vsctl add-bond $BRPRIV $RP_PRIV_LEG_HA_PORT $RP_PRIV_LEG_DEV_HA  $RP_PRIV_LEG_DEV bond_mode=active-backup"
 		logCMD "ssh $RP ovs-vsctl add-bond $BRPUB $RP_PUB_LEG_HA_PORT $RP_PUB_LEG_DEV_HA  $RP_PUB_LEG_DEV bond_mode=active-backup"
@@ -414,8 +417,6 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
 		logCMD "ssh $RP ovs-vsctl add-port $BRPUB $RP_PUB_LEG_DEV"
 	fi
-
-	set +x
 
 	flush_ip_dev $RP $RP_PRIV_LEG_DEV
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
