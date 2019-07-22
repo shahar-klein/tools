@@ -54,7 +54,7 @@ do
 	# Let the backup take over
 	if [ $NIC_MODE = "ha" ]; then
         	rx_bytes_ha=`ethtool -S $RP_PRIV_LEG_DEV_HA | grep $rxbytes | awk '{print  $2}'`
-        	tx_byte_ha=`ethtool -S $RP_PUB_LEG_DEV_HA | grep $txbytes | awk '{print  $2}'`
+        	tx_bytes_ha=`ethtool -S $RP_PUB_LEG_DEV_HA | grep $txbytes | awk '{print  $2}'`
         	rx_dropped_ha=`ethtool -S $RP_PRIV_LEG_DEV_HA | grep "rx_out_of_buffer:" | awk '{print  $2}'`
         	tx_dropped_ha=`ethtool -S $RP_PUB_LEG_DEV_HA | grep "tx_queue_dropped:" | awk '{print  $2}'`
         	echo $dur $rx_bytes_ha >> $RESULTS_LOG_DIR/${RP_PRIV_LEG_DEV_HA}.tput
