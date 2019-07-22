@@ -515,6 +515,10 @@ cleanup() {
 	# logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
 	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 
+	ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br
+	flush_ip_dev localhost $RP_PRIV_LEG_DEV_BM
+	flush_ip_dev localhost $RP_PUB_LEG_DEV_BM
+
 	#iptables
 	log "Clean ip tables"
 	logCMD "ssh $RP iptables -F"
@@ -739,8 +743,10 @@ rp_irq_affinity() {
 
 setup_buffer_size() {
 	buffer_size=$1
+	set +e
 	logCMD "ssh $RP ethtool -G $RP_PRIV_LEG_DEV rx $buffer_size"
 	logCMD "ssh $RP ethtool -G $RP_PUB_LEG_DEV tx $buffer_size"
+	set -e
 }
 
 linux_forward_setup() {
