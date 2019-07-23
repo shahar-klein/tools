@@ -276,6 +276,7 @@ reboot_container() {
 
 shutdown_vm() {
 	VM=$1
+	echo "shutting down $VM"
 	log "shutting down $VM"
 
 	set +e
@@ -395,14 +396,27 @@ setup_vm_ovs() {
 		logCMD "ssh $RP ovs-vsctl set open . other-config:hw-offload=true"
 		logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV hw-tc-offload on"
 		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
+		if [ $nic_mode = "ha" ]; then
+			logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV_HA hw-tc-offload on"
+			logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV_HA hw-tc-offload on"
+		fi
 	fi
 	logCMD "ssh $RP systemctl restart openvswitch-switch.service"
 	sleep 2
 	logCMD "ssh $RP ovs-vsctl add-br $BRPRIV"
-	logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
-
 	logCMD "ssh $RP ovs-vsctl add-br $BRPUB"
-	logCMD "ssh $RP ovs-vsctl add-port $BRPUB $RP_PUB_LEG_DEV"
+
+	if [ $nic_mode = "ha" ]; then
+		logCMD "ssh $RP ovs-vsctl add-bond $BRPRIV $RP_PRIV_LEG_HA_PORT $RP_PRIV_LEG_DEV_HA  $RP_PRIV_LEG_DEV bond_mode=active-backup"
+		logCMD "ssh $RP ovs-vsctl add-bond $BRPUB $RP_PUB_LEG_HA_PORT $RP_PUB_LEG_DEV_HA  $RP_PUB_LEG_DEV bond_mode=active-backup"
+
+		# Explicitly set the active interfaces
+		logCMD "ssh $RP ovs-appctl bond/set-active-slave  $RP_PRIV_LEG_HA_PORT $RP_PRIV_LEG_DEV"
+		logCMD "ssh $RP ovs-appctl bond/set-active-slave  $RP_PUB_LEG_HA_PORT $RP_PUB_LEG_DEV"
+	else
+		logCMD "ssh $RP ovs-vsctl add-port $BRPRIV $RP_PRIV_LEG_DEV"
+		logCMD "ssh $RP ovs-vsctl add-port $BRPUB $RP_PUB_LEG_DEV"
+	fi
 
 	flush_ip_dev $RP $RP_PRIV_LEG_DEV
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
@@ -412,6 +426,10 @@ setup_vm_ovs() {
 
 	logCMD "ssh $RP ip link set dev $RP_PRIV_LEG_DEV up"
 	logCMD "ssh $RP ip link set dev $RP_PUB_LEG_DEV up"
+	if [ $nic_mode = "ha" ]; then
+		logCMD "ssh $RP ip link set dev $RP_PRIV_LEG_DEV_HA up"
+		logCMD "ssh $RP ip link set dev $RP_PUB_LEG_DEV_HA up"
+	fi
 	logCMD "ssh $RP ip link set dev $BRPRIV up"
 	logCMD "ssh $RP ip link set dev $BRPUB up"
 
@@ -516,8 +534,8 @@ cleanup() {
 	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 
 	ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br
-	flush_ip_dev localhost $RP_PRIV_LEG_DEV_BM
-	flush_ip_dev localhost $RP_PUB_LEG_DEV_BM
+	flush_ip_dev localhost $RP_PRIV_LEG_DEV_BM > /dev/null 2>&1
+	flush_ip_dev localhost $RP_PUB_LEG_DEV_BM > /dev/null 2>&1
 
 	#iptables
 	log "Clean ip tables"
@@ -583,13 +601,17 @@ collectCPULogs() {
 collectBWLogs() {
 	nic_mode=$1
 
-	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV /tmp $nic_mode
+	ssh $RP bash $TOOLS/collect_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_LEG_DEV_HA $RP_PUB_LEG_DEV_HA /tmp $nic_mode
 
  
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.tput $LOGDIR/${RP_PRIV_LEG_DEV}.tput > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PUB_LEG_DEV}.tput $LOGDIR/${RP_PUB_LEG_DEV}.tput > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PRIV_LEG_DEV}.dropped $LOGDIR/${RP_PRIV_LEG_DEV}.dropped > /dev/null 2>&1
 	scp $RP:/tmp/${RP_PUB_LEG_DEV}.dropped $LOGDIR/${RP_PUB_LEG_DEV}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV_HA}.tput $LOGDIR/${RP_PRIV_LEG_DEV_HA}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV_HA}.tput $LOGDIR/${RP_PUB_LEG_DEV_HA}.tput > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PRIV_LEG_DEV_HA}.dropped $LOGDIR/${RP_PRIV_LEG_DEV_HA}.dropped > /dev/null 2>&1
+	scp $RP:/tmp/${RP_PUB_LEG_DEV_HA}.dropped $LOGDIR/${RP_PUB_LEG_DEV_HA}.dropped > /dev/null 2>&1
 
 }
 
@@ -713,30 +735,30 @@ host_vm_cpu_binding() {
 # XXX Fixme. The ssh below seems to have a couple of issues
 rp_irq_affinity() {
 	affinity_mode=$1
+	PRIV_ITF=$2
+	PUB_ITF=$3
 
 	set +e
 	ssh $RP systemctl status irqbalance > /dev/null 2>&1
 	set -e
 
 	# Set the # of channels
-	ssh $RP ethtool -L $RP_PRIV_LEG_DEV combined $affinity_mode > /dev/null 2>&1
-	ssh $RP ethtool -L $RP_PUB_LEG_DEV combined $affinity_mode > /dev/null 2>&1
+	ssh $RP ethtool -L $PRIV_ITF combined $affinity_mode > /dev/null 2>&1
+	ssh $RP ethtool -L $PUB_ITF combined $affinity_mode > /dev/null 2>&1
 	if [ $affinity_mode -eq 4 ] ; then
-		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
-		ssh $RP "C=3 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${PRIV_ITF} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=3 ; for r in \`cat /proc/interrupts | grep ${PUB_ITF} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 	else
-		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PRIV_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
-		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${RP_PUB_LEG_DEV} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${PRIV_ITF} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
+		ssh $RP "C=-1 ; for r in \`cat /proc/interrupts | grep ${PUB_ITF} | cut -f1 -d: \` ; do  C=\$((C+1)) ; echo \"obase=16;\$((1<<\$C))\" | bc > /proc/irq/\${r}/smp_affinity ; done"
 	fi
 	#Verify
-	PRIV_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity' | wc -l`
-	PUB_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity' | wc -l`
+	PRIV_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $PRIV_ITF | wc -l`
+	PUB_INT_VERIFY=`ssh $RP cat /proc/interrupts | grep $PUB_ITF | wc -l`
 	if [ $PRIV_INT_VERIFY -ne $affinity_mode -o $PUB_INT_VERIFY -ne $affinity_mode ] ; then 
-		echo "ERROR: Can't verify irq affinity"
-		set -x
-		ssh $RP cat /proc/interrupts | grep $RP_PRIV_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity'
-		ssh $RP cat /proc/interrupts | grep $RP_PUB_LEG_DEV | cut -f1 -d: | xargs -I % sh -c 'echo -n %:CPU-mask: && cat /proc/irq/%/smp_affinity'
-		set +x
+		echo "ERROR: Can't verify irq affinity expected priv: $PRIV_INT_VERIFY , $affinity_mode pub $PUB_INT_VERIFY, $affinity_mode"
+		ssh $RP cat /proc/interrupts | grep $PRIV_ITF
+		ssh $RP cat /proc/interrupts | grep $PUB_ITF
 		exit 6
 	fi
 }
@@ -860,6 +882,7 @@ then
 
 	shutdown_vm $RPVM_PT
 	shutdown_vm $RPVM_SRIOV
+	shutdown_vm $RPVM_HA
 	# shutdown_container $RPVM_CONTAINER
 
 	# Set profile
@@ -906,6 +929,10 @@ elif [ $mode = "sriov" ] ; then
 	RPVM=$RPVM_SRIOV
 	RP_PRIV_LEG_DEV=$RP_PRIV_LEG_DEV_VM
 	RP_PUB_LEG_DEV=$RP_PUB_LEG_DEV_VM
+elif [ $mode = "ha" ] ; then
+	RPVM=$RPVM_HA
+	RP_PRIV_LEG_DEV=$RP_PRIV_LEG_DEV_VM
+	RP_PUB_LEG_DEV=$RP_PUB_LEG_DEV_VM
 elif [ $mode = "bm" ] ; then
 	RP=$RP_BM
 	RPVM=$RPVM_CONTAINER
@@ -949,7 +976,15 @@ fi
 if [ $mode != "bm" ]; then
 	host_vm_cpu_binding $cpu_binding
 fi
-rp_irq_affinity $cpu_affinity
+rp_irq_affinity $cpu_affinity $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV
+if [ $mode = "ha" ]; then
+	ssh $RP ip link set dev $RP_PRIV_LEG_DEV_HA up
+	ssh $RP ip link set dev $RP_PUB_LEG_DEV_HA up
+	set -x
+	rp_irq_affinity $cpu_affinity $RP_PRIV_LEG_DEV_HA $RP_PUB_LEG_DEV_HA
+	set +x
+fi
+
 setup_dp_profile $mode $dp_profile
 echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
@@ -1030,7 +1065,7 @@ do
 				if [ $RUN_TESTS = "yes" ]
 				then
 					#mkdir -p $LOGDIR
-					rp_irq_affinity $cpu_affinity
+					rp_irq_affinity $mode $cpu_affinity
 				fi
 				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
 				for t in $TESTS

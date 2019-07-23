@@ -31,8 +31,7 @@ set -e
 RUNS=rp_test.runs
 
 # From the following possibilities
-#MODES="pt sriov"
-#MODES="pt sriov bm"
+#MODES="pt sriov bm ha"
 #PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
 #DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload"
 #NUM_SESSIONS="100 500 1000"
@@ -40,12 +39,12 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="sriov"
+MODES="ha"
 PROFILES="NONE"
 BUFFER_SIZE="1024"
 CPU_BINDINGS="dangling"
 CPU_AFFINITIES="4"
-DATAPATHS="linux_fwd"
+DATAPATHS="ovs_fwd_nat_offload"
 NUM_SESSIONS="1000"
 BANDWIDTH_PER_SESSION=20m
 
@@ -91,7 +90,7 @@ iptables-save > $LOGDIR/working.iptables.rules.$$
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
 	# echo $args
-	bash rp_test.bash $LOGDIR $args
+	bash  rp_test.bash $LOGDIR $args
 done
 iptables-restore < $LOGDIR/working.iptables.rules.$$
 rm $LOGDIR/working.iptables.rules.$$
