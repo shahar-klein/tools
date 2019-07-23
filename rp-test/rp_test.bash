@@ -74,6 +74,14 @@ dp_profile=$7
 NUM_SESSIONS=$8
 BW_PER_SESSION=$9
 
+MULTI_IP=no
+
+if [ $mode = pt_multip ] ; then
+	mode=pt
+	MULTI_IP=yes
+fi
+
+
 TEST_TO_RUN=$2
 PLOT_DIR=$1
 TEST_TO_PLOT=$2
@@ -178,7 +186,8 @@ set_ip_dev() {
 	host=$1
 	dev=$2
 	ip=$3
-	ssh $host ip a add dev $dev $ip/24
+	mask=${4:-24}
+	ssh $host ip a add dev $dev $ip/$mask
 	ssh $host ip link set dev $dev up
 	ipset=`ssh $host ip addr show $dev | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`
 	log "set_ip_dev $host $dev => set $ipset"
@@ -353,7 +362,13 @@ setup() {
 
 	LOADER_DEV_MAC=`get_mac_dev $LOADER $LOADER_DEV`
 	flush_ip_dev $LOADER $LOADER_DEV
-	set_ip_dev $LOADER $LOADER_DEV $LOADER_IP
+
+	if [ $MULTI_IP = yes ] ; then
+		set_ip_dev $LOADER $LOADER_DEV $LOADER_IP 16
+		ssh $LOADER "for t in 50 60 ; do for f in {0..250} ; do ip a add dev $LOADER_DEV 5.5.\$t.\$f ; done ; done"
+	else
+		set_ip_dev $LOADER $LOADER_DEV $LOADER_IP
+	fi 
 
 	INITIATOR_DEV_MAC=`get_mac_dev $INITIATOR $INITIATOR_DEV`
 	flush_ip_dev $INITIATOR $INITIATOR_DEV
@@ -780,7 +795,20 @@ linux_forward_setup() {
 linux_forward_nat_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
 	nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
-	ssh $RP $nat_cmd
+
+	if [ $MULTI_IP = no ] ; then
+		nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
+	else
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
+		ssh $RP $nat_cmd
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
+		ssh $RP $nat_cmd
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
+		ssh $RP $nat_cmd
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
+		ssh $RP $nat_cmd
+	fi
+
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PUB_LEG_DEV} -j SNAT --to-source ${RP_PUB_LEG_IP}
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PRIV_LEG_DEV} -j SNAT --to-source ${RP_PRIV_LEG_IP}
 	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
