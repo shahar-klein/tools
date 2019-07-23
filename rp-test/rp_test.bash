@@ -801,11 +801,11 @@ linux_forward_nat_setup() {
 	else
 		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+250+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+500+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+750+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
 		ssh $RP $nat_cmd
 	fi
 
