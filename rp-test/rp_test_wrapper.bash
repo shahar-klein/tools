@@ -31,7 +31,7 @@ set -e
 RUNS=rp_test.runs
 
 # From the following possibilities
-#MODES="pt sriov bm ha"
+#MODES="pt sriov bm ha pt_multip"
 #PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
 #DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload"
 #NUM_SESSIONS="100 500 1000"
@@ -39,13 +39,13 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="ha"
+MODES="pt_multip"
 PROFILES="NONE"
 BUFFER_SIZE="1024"
-CPU_BINDINGS="dangling"
-CPU_AFFINITIES="4"
-DATAPATHS="ovs_fwd_nat_offload"
-NUM_SESSIONS="1000"
+CPU_BINDINGS="pinned"
+CPU_AFFINITIES="8"
+DATAPATHS="linux_fwd_nat"
+NUM_SESSIONS="500"
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
