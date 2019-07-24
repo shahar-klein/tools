@@ -399,6 +399,12 @@ setup_vm() {
 
 	logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV gro off"
 	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV gro off"
+
+
+	if [ $MULTI_IP = yes ] ; then
+		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV"
+		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV"
+	fi
 }
 
 setup_vm_ovs() {
@@ -712,6 +718,9 @@ runTest() {
 	#start loader
 	#echo "staring loaded..."
 	cmdBG $LOADER_CMD
+	if [ MULTI_IP = yes ] ; then
+		cmdBG $LOADER_CMD2
+	fi
 	sleep 1
 
 
@@ -794,25 +803,35 @@ linux_forward_setup() {
 
 linux_forward_nat_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
-	nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
 
 	if [ $MULTI_IP = no ] ; then
 		nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
+		ssh $RP $nat_cmd
 	else
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
+		#VIDEO 0-500
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+250+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+500+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
+		#AUDIO 1000-1500
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1000+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+750+\$i ; iptables -t nat -A PREROUTING -i RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
+		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
 		ssh $RP $nat_cmd
 	fi
 
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PUB_LEG_DEV} -j SNAT --to-source ${RP_PUB_LEG_IP}
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PRIV_LEG_DEV} -j SNAT --to-source ${RP_PRIV_LEG_IP}
-	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+
+	if [ $MULTI_IP = no ] ; then
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	else
+		
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
+		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.60.0:${GS_PORT_START} -l 1000 -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	fi
 }
 
 ovs_forward_setup() {
