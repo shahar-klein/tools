@@ -41,7 +41,7 @@ RUNS=rp_test.runs
 # Running the following subset
 MODES="pt_multip"
 PROFILES="NONE"
-BUFFER_SIZE="1024"
+BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
 CPU_AFFINITIES="8"
 DATAPATHS="linux_fwd_nat"
