@@ -579,8 +579,8 @@ cleanup() {
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
 	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
 
-	ssh $LOADER pkill gonoodle
-	ssh $INITIATOR pkill gonoodle
+	ssh $LOADER pkill -9 gonoodle
+	ssh $INITIATOR pkill -9 gonoodle
 
 	set -e
 }
@@ -718,7 +718,7 @@ runTest() {
 	#start loader
 	#echo "staring loaded..."
 	cmdBG $LOADER_CMD
-	if [ MULTI_IP = yes ] ; then
+	if [ $MULTI_IP = yes ] ; then
 		cmdBG $LOADER_CMD2
 	fi
 	sleep 1
@@ -829,7 +829,8 @@ linux_forward_nat_setup() {
 	else
 		
 		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.60.0:${GS_PORT_START} -l 1000 -t $DURATION"
+		rp_port_cmd2=$((RP_PORT_START+250))
+		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p $rp_port_cmd2 -L 5.5.60.0:47998 -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	fi
 }
