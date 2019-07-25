@@ -181,6 +181,38 @@ report_csv() {
 	done
 }
 
+quick_csv() {
+
+	echo ""
+	echo ""
+	echo ""
+	echo ""
+	
+	SCANDIR=${1:?Missing result dir as argument}
+	
+	for DIR in `ls -tr -d $SCANDIR/*/` ; do
+		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		D=`basename $DIR`
+		echo -n $D,
+		for DEV in $DEVS ; do
+			DEVP=`echo $DEV| cut -f1 -d.`
+			START=`cat $DIR/$DEV | head -n1 | awk '{print $2}'`
+			END=`cat $DIR/$DEV | tail -n1 | awk '{print $2}'`
+			LINES=`wc -l $DIR/$DEV | awk '{print $1}'`
+			BW=`bc <<< "scale=2;($END-$START)*8/($LINES*1000000000)"`
+			echo -n $BW,
+
+			#cat $DIR/$DEV | awk '{sum+=$2} END {{BW=sum*8/(NR*1000000000)} if (BW < 1) {printf("\033[31m") }{printf(" %.2f GBit/s. ", BW)} {printf("\033[37m")}}' 
+		done
+		CPU_BEGIN=$CPU_START
+		CPU_END=$NUM_CPUS
+		echo $D | grep -q bm && CPU_BEGIN=0 && CPU_END=$((TOTAL_CPUS-1))
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$3} END {printf("%.2f,", 100-sum/NR)}'
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$2} END {printf("%.2f,", sum/NR)}'
+		cat $DIR/[$CPU_BEGIN-$CPU_END].info |  awk '{sum+=$1} END {printf("%.2f,", sum/NR)}'
+		for f in `ls -1 $DIR/*.dropped` ; do awk 'NR==1 {a=$2} ; END{print $2-a}' $f ; done | awk '{sum+=$1} END {print sum}'
+	done
+}
 quick_scan_results_dir() {
 
 	echo ""
@@ -226,6 +258,11 @@ fi
 if [ $1 = "csv" ] ; then
 	shift
 	report_csv $@
+	exit 0
+fi
+if [ $1 = "quick_csv" ] ; then
+	shift
+	quick_csv $@
 	exit 0
 fi
 

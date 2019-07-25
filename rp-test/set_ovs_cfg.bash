@@ -46,18 +46,45 @@ ovs_forward_nat_setup() {
 	RP_PRIV_LEG_IP=${16}
 	RP_PUB_LEG_IP=${17}
 
+	                #VIDEO 0-500
+                nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
+                ssh $RP $nat_cmd
+                nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
+                ssh $RP $nat_cmd
+                #AUDIO 1000-1500
+                nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1000+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
+                ssh $RP $nat_cmd
+                nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
+                ssh $RP $nat_cmd
 
+
+	# XXX In the multi-IP case we need a MAC for each IP.
 	for ((i = 0; i < $NUM_SESSIONS; i++)); do
 		GC_PORT=$((GFN_PUB_PORT_START+i))
 		GS_PORT=$((GS_PORT_START+i))
 
-		# Add the pub side of the flows
-		echo "priority=100,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$LOADER_IP,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
-		echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+		if [ $IS_MULTI = "no" ] ; then 
+			echo "priority=100,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$LOADER_IP,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+			# Add the priv _side of the flows
+			echo "priority=100,udp,nw_dst=$RP_PRIV_LEG_IP,tp_src=$GS_PORT,action=mod_nw_dst=$INITIATOR_IP,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
+			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$INITIATOR_IP,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
+		else 
+			GS_IP=5.5.50.$i
+			if [ $i -ge 250 ] ; then
+				y=$((i-250))
+				GS_IP=5.5.60.$y
+			fi
 
-		# Add the priv _side of the flows
-		echo "priority=100,udp,nw_dst=$RP_PRIV_LEG_IP,tp_src=$GS_PORT,action=mod_nw_dst=$INITIATOR_IP,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
-		echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$INITIATOR_IP,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
+			echo "priority=100,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$GS_IP,mod_tp_dst=47998,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_IP,tp_dst=47998,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+			# Add the priv _side of the flows
+			echo "priority=100,udp,nw_src=$GS_IP,tp_src=47998,action=mod_nw_dst=$INITIATOR_IP,mod_tp_src=$GC_PORT,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
+			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$INITIATOR_IP,tp_src=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
+		fi
+		# Add the pub side of the flows
 	done
 }
 
@@ -108,13 +135,17 @@ ovs_forward_ct_setup() {
 
 ### main ###
 
+
 mode=$1
-BRPRIV=$2
-BRPUB=$3
-RP_PRIV_LEG_DEV=$4
-RP_PUB_LEG_DEV=$5
-RP_PRIV_PATCH_PORT=$6
-RP_PUB_PATCH_PORT=$7
+IS_MULTI={$2:-no}
+BRPRIV=$3
+BRPUB=$4
+RP_PRIV_LEG_DEV=$5
+RP_PUB_LEG_DEV=$6
+RP_PRIV_PATCH_PORT=$7
+RP_PUB_PATCH_PORT=$8
+shift
+shift
 
 if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
 	rm -f /tmp/flows.${BRPRIV}.$$
@@ -137,7 +168,6 @@ echo "priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BR
 echo "priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPUB}.$$
 echo "priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPUB}.$$
 
-shift
 case  $mode in
 	ovs_forward_setup)
 		ovs_forward_setup $@
