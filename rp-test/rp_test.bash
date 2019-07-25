@@ -186,7 +186,7 @@ set_ip_dev() {
 	host=$1
 	dev=$2
 	ip=$3
-	mask=${4:-24}
+	mask=${4:-16}
 	ssh $host ip a add dev $dev $ip/$mask
 	ssh $host ip link set dev $dev up
 	ipset=`ssh $host ip addr show $dev | grep "inet\b" | awk '{print $2}' | cut -d/ -f1`
@@ -401,10 +401,12 @@ setup_vm() {
 	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV gro off"
 
 
+	set +e
 	if [ $MULTI_IP = yes ] ; then
 		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV"
 		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV"
 	fi
+	set -e
 }
 
 setup_vm_ovs() {
