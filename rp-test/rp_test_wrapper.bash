@@ -41,10 +41,10 @@ RUNS=rp_test.runs
 # Running the following subset
 MODES="pt_multip"
 PROFILES="NONE"
-BUFFER_SIZE="1024"
+BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
 CPU_AFFINITIES="8"
-DATAPATHS="linux_fwd_nat"
+DATAPATHS="ovs_fwd_nat_offload"
 NUM_SESSIONS="500"
 BANDWIDTH_PER_SESSION=20m
 
@@ -90,7 +90,7 @@ iptables-save > $LOGDIR/working.iptables.rules.$$
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
 	# echo $args
-	bash  rp_test.bash $LOGDIR $args
+	bash rp_test.bash  $LOGDIR $args
 done
 iptables-restore < $LOGDIR/working.iptables.rules.$$
 rm $LOGDIR/working.iptables.rules.$$
