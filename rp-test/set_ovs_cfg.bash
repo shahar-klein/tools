@@ -100,22 +100,45 @@ ovs_forward_ct_setup() {
 		GC_PORT=$((GFN_PUB_PORT_START+i))
 		GS_PORT=$((GS_PORT_START+i))
 
+		if [ $IS_MULTI = "no" ] ; then 
 		# Add the pub side of the flows
-		echo "priority=100,udp,action=ct(zone=10,nat,table=11)" >> /tmp/flows.${BRPUB}.$$
-		echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$LOADER_IP:$GS_PORT)),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
-		echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+est,action=ct(zone=10,nat),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
-		echo "in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
-
-		echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_LEG_IP)),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
-
-		echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+est,action=ct(zone=12,nat),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
-
-
-		# Add the priv _side of the flows
-		echo "priority=100,udp,action=ct(zone=12,nat,table=14)" >> /tmp/flows.${BRPRIV}.$$
-		echo "table=14,priority=100,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
-		echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
-		echo "table=15,priority=100,in_port=$RP_PUB_PATCH_PORT,udp,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
+			echo "priority=100,udp,action=ct(zone=10,nat,table=11)" >> /tmp/flows.${BRPUB}.$$
+			echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$LOADER_IP:$GS_PORT)),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+est,action=ct(zone=10,nat),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
+                        
+			echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_LEG_IP)),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+			echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,tp_dst=$GS_PORT,ct_state=+trk+est,action=ct(zone=12,nat),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+                        
+			# Add the priv _side of the flows
+			echo "priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct(zone=12,nat,table=14)" >> /tmp/flows.${BRPRIV}.$$
+			echo "table=14,priority=100,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
+			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
+			echo "table=15,priority=100,in_port=$RP_PUB_PATCH_PORT,udp,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
+		else
+			GS_IP=5.5.50.$i
+			if [ $i -ge 250 ] ; then
+				y=$((i-250))
+				GS_IP=5.5.60.$y
+			fi
+			echo "priority=100,in_port=$RP_PUB_LEG_DEV,udp,action=ct(zone=10,nat,table=11)" >> /tmp/flows.${BRPUB}.$$
+			echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$GS_IP:47998)),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+est,action=ct(zone=10,nat),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+			echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
+                        
+			echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_IP,tp_dst=47998,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_LEG_IP)),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+			echo "table=13,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_IP,tp_dst=47998,ct_state=+trk+est,action=ct(zone=12,nat),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPRIV}.$$
+                        
+                        
+			# Add the priv _side of the flows
+			echo "priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct(zone=12,nat,table=14)" >> /tmp/flows.${BRPRIV}.$$
+			echo "table=14,priority=100,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
+			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
+			echo "table=15,priority=100,in_port=$RP_PUB_PATCH_PORT,udp,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPUB}.$$
+		fi
 	done
 
 }
