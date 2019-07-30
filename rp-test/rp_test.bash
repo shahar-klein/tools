@@ -73,7 +73,7 @@ cpu_affinity=$6
 dp_profile=$7
 NUM_SESSIONS=$8
 BW_PER_SESSION=$9
-
+hfunc=${10}
 MULTI_IP=no
 
 if [ $mode = pt_multip ] ; then
@@ -375,6 +375,12 @@ setup() {
 	set_ip_dev $INITIATOR $INITIATOR_DEV $INITIATOR_IP
 }
 
+sethfunc() {
+	hfunc=$1
+	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc $hfunc"
+	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc $hfunc"
+}
+
 setup_vm() {
 
 	local VM=$1
@@ -393,9 +399,6 @@ setup_vm() {
 	RP_PUB_LEG_MAC=`get_mac_dev $RP $RP_PUB_LEG_DEV`
 	flush_ip_dev $RP $RP_PUB_LEG_DEV
 	set_ip_dev $RP $RP_PUB_LEG_DEV $RP_PUB_LEG_IP
-
-	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc toeplitz"
-	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc toeplitz"
 
 	logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV gro off"
 	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV gro off"
@@ -951,7 +954,7 @@ killBGThreads() {
 if [ $RUN_TESTS = "yes" ]
 then
 	#set up the test env according to the input:
-	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}
+	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${hfunc}_${NUM_SESSIONS}
 	mkdir -v -p $LOGDIR > /dev/null 2>&1
 
 	setup
@@ -1059,13 +1062,14 @@ rp_irq_affinity $cpu_affinity $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV
 if [ $mode = "ha" ]; then
 	ssh $RP ip link set dev $RP_PRIV_LEG_DEV_HA up
 	ssh $RP ip link set dev $RP_PUB_LEG_DEV_HA up
-	set -x
+	#set -x
 	rp_irq_affinity $cpu_affinity $RP_PRIV_LEG_DEV_HA $RP_PUB_LEG_DEV_HA
-	set +x
+	#set +x
 fi
 
 setup_dp_profile $mode $dp_profile
-echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
+sethfunc $hfunc
+echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
