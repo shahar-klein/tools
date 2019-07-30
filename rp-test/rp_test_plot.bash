@@ -191,9 +191,10 @@ quick_csv() {
 	SCANDIR=${1:?Missing result dir as argument}
 	
 	for DIR in `ls -tr -d $SCANDIR/*/` ; do
-		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		DEVS=`ls -r $DIR/*.tput | xargs -r -l basename`
+		DEVSP=`ls -r $DIR/*.tput | xargs -r -l basename | cut -f1 -d. | xargs`
 		D=`basename $DIR`
-		echo -n $D,
+		echo -n $D $DEVSP,
 		for DEV in $DEVS ; do
 			DEVP=`echo $DEV| cut -f1 -d.`
 			START=`cat $DIR/$DEV | head -n1 | awk '{print $2}'`
@@ -223,7 +224,7 @@ quick_scan_results_dir() {
 	SCANDIR=${1:?Missing result dir as argument}
 	
 	for DIR in `ls -tr -d $SCANDIR/*/` ; do
-		DEVS=`ls $DIR/*.tput | xargs -r -l basename`
+		DEVS=`ls -r $DIR/*.tput | xargs -r -l basename`
 		D=`basename $DIR`
 		echo $D:
 		echo -n "  "
