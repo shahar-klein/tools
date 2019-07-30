@@ -621,6 +621,13 @@ collectCPULogs() {
 	#done
 }
 
+collectLoaderBWLogs() {
+
+	ssh $LOADER bash $TOOLS/collect_loader_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $LOADER_DEV /tmp
+
+	scp $LOADER:/tmp/${LOADER_DEV}.tput $LOGDIR/${LOADER_DEV}_TX.tput > /dev/null 2>&1
+}
+
 collectBWLogs() {
 	nic_mode=$1
 
@@ -734,6 +741,8 @@ runTest() {
 runMetrics() {
 	nic_mode=$1
 	collectBWLogs $nic_mode &
+	P2KILL+="$! "
+	collectLoaderBWLogs &
 	P2KILL+="$! "
 	for ((cpu=0;cpu<$TOTAL_CPUS;cpu++))
 	do
