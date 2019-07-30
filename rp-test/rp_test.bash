@@ -378,7 +378,15 @@ setup() {
 sethfunc() {
 	hfunc=$1
 	logCMD "ssh $RP ethtool -X $RP_PRIV_LEG_DEV hfunc $hfunc"
+	ssh $RP ethtool -x $RP_PRIV_LEG_DEV | grep $hfunc | grep -q on
+	if [ $? -ne 0 ] ; then
+		echo "ERROR: $RP_PRIV_LEG_DEV hfunc is not $hfunc"
+	fi
 	logCMD "ssh $RP ethtool -X $RP_PUB_LEG_DEV hfunc $hfunc"
+	ssh $RP ethtool -x $RP_PUB_LEG_DEV | grep $hfunc | grep -q on
+	if [ $? -ne 0 ] ; then
+		echo "ERROR: $RP_PUB_LEG_DEV hfunc is not $hfunc"
+	fi
 }
 
 setup_vm() {
