@@ -39,13 +39,14 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="pt"
+MODES="pt_multip"
 PROFILES="NONE"
-BUFFER_SIZE="1024 8192"
+BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
-CPU_AFFINITIES="4 8"
-DATAPATHS="linux_fwd"
-NUM_SESSIONS="500 1000" 
+CPU_AFFINITIES="8"
+HASH_FUNC="xor toeplitz"
+DATAPATHS="linux_fwd_nat"
+NUM_SESSIONS="500" 
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
@@ -56,8 +57,10 @@ outline_all() {
 				for a in $CPU_AFFINITIES ; do
 					for d in $DATAPATHS ; do
 						for n in $NUM_SESSIONS ; do
-							CASE=$((CASE+1))
-							echo case_${CASE} $m $bs $b $a $d $n $BANDWIDTH_PER_SESSION
+							for h in $HASH_FUNC ; do
+								CASE=$((CASE+1))
+								echo case_${CASE} $m $bs $b $a $d $n $BANDWIDTH_PER_SESSION $h
+							done
 						done
 					done
 				done
@@ -89,7 +92,7 @@ fi
 iptables-save > $LOGDIR/working.iptables.rules.$$
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
-	# echo $args
+	#echo $args
 	bash rp_test.bash  $LOGDIR $args
 done
 iptables-restore < $LOGDIR/working.iptables.rules.$$
