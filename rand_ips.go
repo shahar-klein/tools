@@ -39,7 +39,7 @@ func main() {
 	end := os.Args[2]
 	endN := ip2int(net.ParseIP(end))
 	numIPs, _ := strconv.Atoi(os.Args[3])
-	fmt.Println("Begin:", begin, "End:", end, "Num IPs:", numIPs)
+//	fmt.Println("Begin:", begin, "End:", end, "Num IPs:", numIPs)
 	for i:=0; i < numIPs;  i++ {
 		ipN := (seededRand.Uint32() % (endN - beginN)) + beginN
 		ip := int2ip(ipN)
