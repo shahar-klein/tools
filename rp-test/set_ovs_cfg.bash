@@ -47,33 +47,33 @@ ovs_forward_nat_setup() {
 	RP_PUB_LEG_IP=${17}
 
 	# XXX In the multi-IP case we need a MAC for each IP.
-	for ((i = 0; i < $NUM_SESSIONS; i++)); do
-		GC_PORT=$((GFN_PUB_PORT_START+i))
-		GS_PORT=$((GS_PORT_START+i))
+	if [ $IS_MULTI = "no" ] ; then 
+		for ((i = 0; i < $NUM_SESSIONS; i++)); do
+			GC_PORT=$((GFN_PUB_PORT_START+i))
+			GS_PORT=$((GS_PORT_START+i))
 
-		if [ $IS_MULTI = "no" ] ; then 
 			echo "priority=100,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$LOADER_IP,mod_tp_dst=$GS_PORT,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
 			echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$LOADER_IP,tp_dst=$GS_PORT,action=mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
                         
 			# Add the priv _side of the flows
 			echo "priority=100,udp,nw_dst=$RP_PRIV_LEG_IP,tp_src=$GS_PORT,action=mod_nw_dst=$INITIATOR_IP,mod_tp_dst=$GC_PORT,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
 			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$INITIATOR_IP,tp_dst=$GC_PORT,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
-		else 
-			GS_IP=5.5.50.$i
-			if [ $i -ge 250 ] ; then
-				y=$((i-250))
-				GS_IP=5.5.60.$y
-			fi
-
+		done
+	else 
+		GC_PORT=$GFN_PUB_PORT_START
+		GS_PORT=$GS_PORT_START
+		for GS_IP in `cat /root/git/tools/1000ips` ; do
 			echo "priority=100,udp,nw_dst=$RP_PUB_LEG_IP,tp_dst=$GC_PORT,action=mod_nw_dst=$GS_IP,mod_tp_dst=47998,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
 			echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,nw_dst=$GS_IP,tp_dst=47998,action=dec_ttl,mod_nw_src=$RP_PRIV_LEG_IP,mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
                         
 			# Add the priv _side of the flows
 			echo "priority=100,udp,nw_src=$GS_IP,tp_src=47998,action=mod_nw_dst=$INITIATOR_IP,mod_tp_src=$GC_PORT,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
 			echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,nw_dst=$INITIATOR_IP,tp_src=$GC_PORT,action=dec_ttl,mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
-		fi
+			GC_PORT=$((GC_PORT+1))
+			GS_PORT=$((GS_PORT+1))
+		done
+	fi
 		# Add the pub side of the flows
-	done
 }
 
 ovs_forward_ct_setup() {
