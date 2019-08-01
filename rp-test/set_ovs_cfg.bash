@@ -148,7 +148,7 @@ ovs_forward_ct_setup() {
 
 
 mode=$1
-IS_MULTI={$2:-no}
+IS_MULTI=${2:-no}
 BRPRIV=$3
 BRPUB=$4
 RP_PRIV_LEG_DEV=$5
