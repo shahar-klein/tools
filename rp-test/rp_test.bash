@@ -1,4 +1,3 @@
-wait
 #!/bin/bash
 
 # TODO
