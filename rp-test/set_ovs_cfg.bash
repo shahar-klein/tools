@@ -148,8 +148,6 @@ ovs_forward_ct_setup() {
 				GS_PORT=$((GS_PORT+1))
 			done
 		fi
-	done
-
 }
 
 
