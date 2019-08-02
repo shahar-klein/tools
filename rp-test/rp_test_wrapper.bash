@@ -46,7 +46,7 @@ CPU_BINDINGS="pinned"
 CPU_AFFINITIES="8"
 HASH_FUNC="toeplitz"
 DATAPATHS="ovs_fwd_ct"
-NUM_SESSIONS="500" 
+NUM_SESSIONS="1" 
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
