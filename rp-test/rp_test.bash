@@ -76,9 +76,14 @@ BW_PER_SESSION=$9
 hfunc=${10}
 MULTI_IP=no
 
+#for logging
+
 if [ $mode = pt_multip ] ; then
 	mode=pt
+	modeP=pt_multip
 	MULTI_IP=yes
+else	
+	modeP=$mode
 fi
 
 
@@ -416,8 +421,8 @@ setup_vm() {
 	set +e
 	ssh $RP "cd $TOOLS ; git reset --hard ; git pull --force --no-edit" 2>&1 > /dev/null
 	if [ $MULTI_IP = yes ] ; then
-		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV"
-		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV"
+		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV 2>&1 > /dev/null"
+		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV 2>&1 > /dev/null"
 	fi
 	set -e
 }
@@ -604,8 +609,8 @@ initTest() {
 	#git pull?
 	#init the RP depending on the datapath/cores/affinity etc
 	#logCMD "ssh $RP sysctl -w net.ipv4.ip_forward=1"
-	logCMD "ssh $LOADER ip route add $PUB_NET via $RP_PRIV_LEG_IP dev $LOADER_DEV"
-	logCMD "ssh $INITIATOR ip route add $PRIV_NET via $RP_PUB_LEG_IP dev $INITIATOR_DEV"
+	logCMD "ssh $LOADER ip route add $PUB_NET via $RP_PRIV_LEG_IP dev $LOADER_DEV 2>&1 >/dev/null"
+	logCMD "ssh $INITIATOR ip route add $PRIV_NET via $RP_PUB_LEG_IP dev $INITIATOR_DEV 2>&1 >/dev/null"
 	#add routing rules
 }
 
@@ -952,7 +957,7 @@ killBGThreads() {
 if [ $RUN_TESTS = "yes" ]
 then
 	#set up the test env according to the input:
-	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${hfunc}_${NUM_SESSIONS}
+	LOGDIR=${LOGDIR_HEAD}/${modeP}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${hfunc}_${NUM_SESSIONS}
 	mkdir -v -p $LOGDIR > /dev/null 2>&1
 
 	setup
@@ -1067,7 +1072,7 @@ fi
 
 setup_dp_profile $mode $dp_profile
 sethfunc $hfunc
-echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
+echo "Running: $modeP, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
