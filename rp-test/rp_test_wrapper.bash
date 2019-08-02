@@ -39,7 +39,7 @@ RUNS=rp_test.runs
 #CPU_BINDINGS="dangling pinned"
 
 # Running the following subset
-MODES="sriov"
+MODES="pt_multip"
 PROFILES="NONE"
 BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
