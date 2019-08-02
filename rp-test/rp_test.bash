@@ -412,6 +412,7 @@ setup_vm() {
 	logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV gro off"
 	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV gro off"
 
+	ssh $RP "cd $TOOLS ; git checkout -f ; git pull sk master"
 
 	set +e
 	if [ $MULTI_IP = yes ] ; then
