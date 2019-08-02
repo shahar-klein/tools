@@ -601,6 +601,8 @@ cleanup() {
 	ssh $LOADER pkill -9 gonoodle
 	ssh $INITIATOR pkill -9 gonoodle
 
+	ssh $LOADER "ps -ef | grep collect_loader_ethtool_stats | awk '{print \$2}' | xargs kill -9 2>&1 > /dev/null" 2>&1 > /dev/null
+
 	set -e
 }
 
@@ -639,7 +641,7 @@ collectCPULogs() {
 }
 
 collectLoaderBWLogs() {
-
+	
 	ssh $LOADER bash $TOOLS/collect_loader_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $LOADER_DEV /tmp
 
 	scp $LOADER:/tmp/${LOADER_DEV}.tput $LOGDIR/${LOADER_DEV}_TX.tput > /dev/null 2>&1
