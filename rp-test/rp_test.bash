@@ -414,6 +414,7 @@ setup_vm() {
 
 
 	set +e
+	ssh $RP "cd $TOOLS ; git reset --hard ; git pull --force --no-edit" 2>&1 > /dev/null
 	if [ $MULTI_IP = yes ] ; then
 		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV"
 		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV"
