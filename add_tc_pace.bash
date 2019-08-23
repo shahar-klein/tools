@@ -14,6 +14,10 @@ fi
 
 ACT=${1:?Missing ACT: add or del}
 DEV=${2:?Missing Device to configure}
+if [ $ACT = delall ] ; then
+	tc qdisc del dev $DEV root
+	exit 0
+fi
 SPORT=${3:?Missing sport}
 RATE=${4:-20mbit}
 
@@ -42,13 +46,13 @@ add() {
 
 }
 
-delall () {
-	tc qdisc del dev $DEV root
-}
-
 del () {
 	echo del
-	#HEXPORT==`echo "obase=16;3336" | bc`
+	HEXPORT=`echo "obase=16;$SPORT" | bc`
+	flowid=`tc filter show dev $DEV | grep -B1 -i $HEXPORT | sed -n 's/.* flowid \([^ ]*\).*/\1/p'`
+	i=`echo $flowid | cut -f2 -d:`
+	tc filter del dev $DEV protocol ip parent 1:0 prio $i u32 flowid $flowid
+	tc qdisc del dev $DEV parent $flowid
 }
 
 if [ $ACT = add ] ; then
@@ -57,6 +61,10 @@ if [ $ACT = add ] ; then
 fi
 if [ $ACT = del ] ; then
 	del
+	exit 0
+fi
+if [ $ACT = delall ] ; then
+	delall
 	exit 0
 fi
 
