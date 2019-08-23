@@ -37,7 +37,7 @@ add() {
 		i=$((i+1))
 	fi
 	# echo $sport,$i,$handle,
-	tc qdisc add dev $DEV parent 1:${i} handle ${HANDLE}: tbf rate ${RATE} burst 2500k latency 5s
+	tc qdisc add dev $DEV parent 1:${i} handle ${HANDLE}: tbf rate ${RATE} burst 100k latency 5s
 	tc filter add dev $DEV protocol ip parent 1:0 prio ${i} u32 match ip sport $SPORT 0xffff flowid 1:${i}
 
 }
