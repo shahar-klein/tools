@@ -1,4 +1,3 @@
-wait
 #!/bin/bash
 
 # TODO
@@ -76,9 +75,14 @@ BW_PER_SESSION=$9
 hfunc=${10}
 MULTI_IP=no
 
+#for logging
+
 if [ $mode = pt_multip ] ; then
 	mode=pt
+	modeP=pt_multip
 	MULTI_IP=yes
+else	
+	modeP=$mode
 fi
 
 
@@ -365,7 +369,8 @@ setup() {
 
 	if [ $MULTI_IP = yes ] ; then
 		set_ip_dev $LOADER $LOADER_DEV $LOADER_IP 16
-		ssh $LOADER "for t in 50 60 ; do for f in {0..250} ; do ip a add dev $LOADER_DEV 5.5.\$t.\$f ; done ; done"
+		#ssh $LOADER "for t in 50 60 ; do for f in {0..250} ; do ip a add dev $LOADER_DEV 5.5.\$t.\$f ; done ; done"
+		ssh $LOADER "s=\$(cat /root/git/tools/1000ips) ; for ip in \$s; do ip a add dev $LOADER_DEV \$ip ; done"
 	else
 		set_ip_dev $LOADER $LOADER_DEV $LOADER_IP
 	fi 
@@ -413,9 +418,10 @@ setup_vm() {
 
 
 	set +e
+	ssh $RP "cd $TOOLS ; git reset --hard ; git pull --force --no-edit" 2>&1 > /dev/null
 	if [ $MULTI_IP = yes ] ; then
-		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV"
-		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV"
+		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV 2>&1 > /dev/null"
+		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV 2>&1 > /dev/null"
 	fi
 	set -e
 }
@@ -595,6 +601,8 @@ cleanup() {
 	ssh $LOADER pkill -9 gonoodle
 	ssh $INITIATOR pkill -9 gonoodle
 
+	ssh $LOADER "ps -ef | grep collect_loader_ethtool_stats | awk '{print \$2}' | xargs kill -9 2>&1 > /dev/null" 2>&1 > /dev/null
+
 	set -e
 }
 
@@ -602,8 +610,8 @@ initTest() {
 	#git pull?
 	#init the RP depending on the datapath/cores/affinity etc
 	#logCMD "ssh $RP sysctl -w net.ipv4.ip_forward=1"
-	logCMD "ssh $LOADER ip route add $PUB_NET via $RP_PRIV_LEG_IP dev $LOADER_DEV"
-	logCMD "ssh $INITIATOR ip route add $PRIV_NET via $RP_PUB_LEG_IP dev $INITIATOR_DEV"
+	logCMD "ssh $LOADER ip route add $PUB_NET via $RP_PRIV_LEG_IP dev $LOADER_DEV 2>&1 >/dev/null"
+	logCMD "ssh $INITIATOR ip route add $PRIV_NET via $RP_PUB_LEG_IP dev $INITIATOR_DEV 2>&1 >/dev/null"
 	#add routing rules
 }
 
@@ -633,7 +641,7 @@ collectCPULogs() {
 }
 
 collectLoaderBWLogs() {
-
+	
 	ssh $LOADER bash $TOOLS/collect_loader_ethtool_stats.bash $LOG_DURATION $LOG_INTERVAL $LOADER_DEV /tmp
 
 	scp $LOADER:/tmp/${LOADER_DEV}.tput $LOGDIR/${LOADER_DEV}_TX.tput > /dev/null 2>&1
@@ -738,9 +746,6 @@ runTest() {
 	#start loader
 	#echo "staring loaded..."
 	cmdBG $LOADER_CMD
-	if [ $MULTI_IP = yes ] ; then
-		cmdBG $LOADER_CMD2
-	fi
 	sleep 1
 
 
@@ -830,16 +835,13 @@ linux_forward_nat_setup() {
 		nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
 		ssh $RP $nat_cmd
 	else
-		#VIDEO 0-500
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.50.\$i:47998 ; done"
+		#VIDEO 0-1000
+		nat_cmd="i=0 ; s=\$(cat /root/git/tools/1000ips) ; for ip in \$s; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination \$ip:47998 ; i=\$((i + 1)) ; done"
+		#nat_cmd="i=0 ; for ip in `cat $RAND_IPS` ; do let dp=$GFN_PUB_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination \$ip:47998 ; i=$((i + 1)) ; done"
 		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment VIDEO -j DNAT --to-destination 5.5.60.\$i:47998 ; done"
-		ssh $RP $nat_cmd
-		#AUDIO 1000-1500
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1000+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
-		ssh $RP $nat_cmd
-		nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1250+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.60.\$i:48000 ; done"
-		ssh $RP $nat_cmd
+		#AUDIO 1000-2000
+		#nat_cmd="for i in {0..250} ; do let dp=$GFN_PUB_PORT_START+1000+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -m comment --comment AUDIO -j DNAT --to-destination 5.5.50.\$i:48000 ; done"
+		#ssh $RP $nat_cmd
 	fi
 
 	ssh $RP iptables -t nat -A POSTROUTING -o ${RP_PUB_LEG_DEV} -j SNAT --to-source ${RP_PUB_LEG_IP}
@@ -850,9 +852,7 @@ linux_forward_nat_setup() {
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	else
 		
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		rp_port_cmd2=$((RP_PORT_START+250))
-		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p $rp_port_cmd2 -L 5.5.60.0:47998 -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	fi
 }
@@ -876,9 +876,7 @@ ovs_forward_nat_setup() {
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	else
 		
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		rp_port_cmd2=$((RP_PORT_START+250))
-		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p $rp_port_cmd2 -L 5.5.60.0:47998 -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	fi
 
@@ -895,9 +893,7 @@ ovs_forward_ct_setup() {
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	else
 		
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		rp_port_cmd2=$((RP_PORT_START+250))
-		LOADER_CMD2="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C 250 -R 250 -M 10 -b $BW_PER_SESSION -p $rp_port_cmd2 -L 5.5.60.0:47998 -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	fi
 
@@ -962,7 +958,7 @@ killBGThreads() {
 if [ $RUN_TESTS = "yes" ]
 then
 	#set up the test env according to the input:
-	LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${hfunc}_${NUM_SESSIONS}
+	LOGDIR=${LOGDIR_HEAD}/${modeP}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${hfunc}_${NUM_SESSIONS}
 	mkdir -v -p $LOGDIR > /dev/null 2>&1
 
 	setup
@@ -1077,7 +1073,7 @@ fi
 
 setup_dp_profile $mode $dp_profile
 sethfunc $hfunc
-echo "Running: $mode, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
+echo "Running: $modeP, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
 runMetrics $mode
 #echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"

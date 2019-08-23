@@ -44,9 +44,9 @@ PROFILES="NONE"
 BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
 CPU_AFFINITIES="8"
-HASH_FUNC="xor toeplitz"
-DATAPATHS="linux_fwd_nat"
-NUM_SESSIONS="500" 
+HASH_FUNC="toeplitz"
+DATAPATHS="ovs_fwd_ct"
+NUM_SESSIONS="1" 
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {
