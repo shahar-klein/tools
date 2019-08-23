@@ -5,9 +5,9 @@ set -u
 if [ $1 = "-h" -o $1 = "--help" ] ; then
 	echo 
 	echo
-	echo "Usage: $0 [add|delete] device sport <rate>"
-	echo "       # Default rate is 20mb"
-	echo "       # Example: $0 add enp4s0 3333 25mb"
+	echo "Usage: $0 [add|delete|delall] device sport <rate>"
+	echo "       # Default rate is 20mbit"
+	echo "       # Example: $0 add enp4s0 3333 25mbit"
 	echo
 	exit 0
 fi
@@ -40,6 +40,10 @@ add() {
 	tc qdisc add dev $DEV parent 1:${i} handle ${HANDLE}: tbf rate ${RATE} burst 100k latency 5s
 	tc filter add dev $DEV protocol ip parent 1:0 prio ${i} u32 match ip sport $SPORT 0xffff flowid 1:${i}
 
+}
+
+delall () {
+	tc qdisc del dev $DEV root
 }
 
 del () {
