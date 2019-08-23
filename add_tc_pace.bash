@@ -25,7 +25,7 @@ RATE=${4:-20mbit}
 add() {
 
 	#init prio
-	tc qdisc show dev enp5s0 | grep -q prio
+	tc qdisc show dev $DEV | grep -q prio
 	if [ $? -ne 0 ] ; then
 		tc qdisc add dev $DEV root handle 1: prio bands 16
 	fi
