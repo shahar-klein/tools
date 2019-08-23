@@ -15,7 +15,7 @@ fi
 ACT=${1:?Missing ACT: add or del}
 DEV=${2:?Missing Device to configure}
 if [ $ACT = delall ] ; then
-	tc qdisc del dev $DEV root >&-
+	tc qdisc del dev $DEV root &>-
 	exit 0
 fi
 SPORT=${3:?Missing sport}
