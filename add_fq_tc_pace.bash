@@ -40,11 +40,9 @@ add() {
 
 del () {
 	echo del
-	HEXPORT=`echo "obase=16;$SPORT" | bc`
-	flowid=`tc filter show dev $DEV | grep -B1 -i $HEXPORT | sed -n 's/.* flowid \([^ ]*\).*/\1/p'`
-	i=`echo $flowid | cut -f2 -d:`
-	tc filter del dev $DEV protocol ip parent 1:0 prio $i u32 flowid $flowid
-	tc qdisc del dev $DEV parent $flowid
+	tc filter del dev $DEV prio ${SPORT}
+	CLASS_ID=${ROOT_CLASS}:${SPORT}
+	tc class del  dev enp4s0 classid ${CLASS_ID}
 }
 
 if [ $ACT = add ] ; then
