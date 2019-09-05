@@ -1,0 +1,24 @@
+- hosts: kube-master
+  become: yes
+  tasks:
+    - name: initialize the cluster
+      shell: kubeadm init --apiserver-advertise-address={{ hostvars[groups['kube-master'][0]].ansible_host }} --service-cidr 172.16.0.0/16
+      #shell: kubeadm init --apiserver-advertise-address=10.92.128.0 --service-cidr 172.16.0.0/16 
+      args:
+        chdir: $HOME
+
+    - name: create .kube directory
+      become: yes
+      become_user: root
+      file:
+        path: $HOME/.kube
+        state: directory
+        mode: 0755
+
+    - name: copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        owner: root
+
