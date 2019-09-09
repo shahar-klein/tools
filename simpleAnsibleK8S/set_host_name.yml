@@ -5,3 +5,10 @@
     - name: Assign inventory name to hostnames
       hostname:
         name: "{{ inventory_hostname }}"
+    - name: Add hostname resolv
+      #debug:
+      #msg: "{{ ansible_host }}"
+      lineinfile: 
+        dest: /etc/hosts
+        line: "{{ ansible_host }} {{ inventory_hostname }}"
+        state: present
