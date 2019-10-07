@@ -1,0 +1,7 @@
+- hosts: kube-master
+  become: yes
+  tasks:
+    - name: reset the cluster
+      shell: kubeadm reset -f
+
+
