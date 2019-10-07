@@ -108,7 +108,7 @@ ovs_forward_ct_setup() {
 				echo "priority=100,in_port=$RP_PUB_LEG_DEV,udp,action=ct(zone=10,nat,table=11)" >> /tmp/flows.${BRPUB}.$$
 				echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$LOADER_IP:$GS_PORT)),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
 				echo "table=11,priority=100,ct_state=+trk+est,action=$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
-				echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct_clear,ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
+				echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
 	                        
 				# XXX We don't need "udp,tp_dst=$GS_PORT" since all of these ports are in the same host, hence same LOADER_DEV_MAC, if that changes
 				# this'll be needed - keeping it for now.
@@ -119,34 +119,30 @@ ovs_forward_ct_setup() {
 				# Add the priv _side of the flows
 				echo "priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct(zone=12,nat,table=14)" >> /tmp/flows.${BRPRIV}.$$
 				echo "table=14,priority=100,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
-				echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct_clear,ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
+				echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
 				echo "table=15,priority=100,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,normal" >> /tmp/flows.${BRPUB}.$$
 			done
 		else
 			GC_PORT=$GFN_PUB_PORT_START
 			GS_PORT=$GS_PORT_START
 			for GS_IP in `cat /root/git/tools/1000ips` ; do
-				echo "priority=100,in_port=$RP_PUB_LEG_DEV,udp,action=ct(zone=10,table=11)" >> /tmp/flows.${BRPUB}.$$
-				echo "table=11,priority=100,in_port=$RP_PUB_LEG_DEV,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(zone=10,commit,nat(dst=$GS_IP:47998),table=12)" >> /tmp/flows.${BRPUB}.$$
-				echo "table=11,priority=100,in_port=$RP_PUB_LEG_DEV,udp,ct_state=+trk+est,action=ct(zone=10,nat,table=12)" >> /tmp/flows.${BRPUB}.$$
-				echo "table=12,priority=100,udp,action=ct_clear,ct_clear,ct_clear,$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
-
-				echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct(zone=12,table=13)" >> /tmp/flows.${BRPRIV}.$$
+				echo "priority=100,in_port=$RP_PUB_LEG_DEV,udp,action=ct(zone=10,nat,table=11)" >> /tmp/flows.${BRPUB}.$$
+				echo "table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$GS_IP:47998)),$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+				echo "table=11,priority=100,ct_state=+trk+est,action=$RP_PUB_PATCH_PORT" >> /tmp/flows.${BRPUB}.$$
+				echo "priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)" >> /tmp/flows.${BRPRIV}.$$
 	                        
 				# XXX We don't need "udp,nw_dst=$GS_IP" since all of these IPs are in the same host, hence same LOADER_DEV_MAC, if that changes
 				# this'll be needed - keeping it for now.
-				echo "table=13,priority=100,udp,nw_dst=$GS_IP,tp_dst=47998,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_LEG_IP),table=16)" >> /tmp/flows.${BRPRIV}.$$
+				echo "table=13,udp,nw_dst=$GS_IP,tp_dst=47998,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_LEG_IP)),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,normal" >> /tmp/flows.${BRPRIV}.$$
 	                        
-				echo "table=13,priority=100,udp,ct_state=+trk+est,action=ct(zone=12,nat,table=16)" >> /tmp/flows.${BRPRIV}.$$
-				echo "table=16,priority=100,udp,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPRIV}.$$
+				echo "table=13,ct_state=+trk+est,action=mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$LOADER_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPRIV}.$$
 	                        
 	                        
 				# Add the priv _side of the flows
-				echo "priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct(zone=12,table=14)" >> /tmp/flows.${BRPRIV}.$$
-				echo "table=14,priority=100,udp,ct_state=+trk+est,action=ct(zone=12,nat),ct_clear,ct_clear,ct_clear,$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
-
-				echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct(zone=10,table=15)" >> /tmp/flows.${BRPUB}.$$
-				echo "table=15,priority=100,udp,ct_state=+trk+est,action=ct(zone=10,nat),mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPUB}.$$
+				echo "priority=100,in_port=$RP_PRIV_LEG_DEV,udp,action=ct(zone=12,nat,table=14)" >> /tmp/flows.${BRPRIV}.$$
+				echo "table=14,priority=100,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT" >> /tmp/flows.${BRPRIV}.$$
+				echo "priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)" >> /tmp/flows.${BRPUB}.$$
+				echo "table=15,priority=100,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_LEG_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$INITIATOR_DEV_MAC,dec_ttl,normal" >> /tmp/flows.${BRPUB}.$$
 
 				GC_PORT=$((GC_PORT+1))
 				GS_PORT=$((GS_PORT+1))
