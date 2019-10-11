@@ -8,6 +8,11 @@ import (
         "github.com/vishvananda/netlink"
 )
 
+// Given a VF's PCI address of the form 0000:8b:00.2, return the MAC address.
+// Note "0000" is required in the input PCI BDF.
+// This doesn't support PF currently.
+
+
 //
 // XXX-Maybe there is a better way to do this. Generalize this, might be too
 // Mellanox specific.
@@ -70,6 +75,6 @@ func main() {
 	if err != nil {
 		fmt.Println("Error getting MAC address for PCI %s: %v", pciAddr, err)
 	}
-	fmt.Println("HW address for PCI addr %s: %s", pciAddr, macAddr)
+	fmt.Println("HW address for PCI addr", pciAddr, ":", macAddr)
 }
 
