@@ -2,7 +2,7 @@
   become: yes
   tasks:
     - name: initialize the cluster
-      shell: kubeadm init --apiserver-advertise-address={{ hostvars[groups['kube-master'][0]].ansible_host }} --service-cidr 172.16.0.0/16
+      shell: kubeadm init --apiserver-advertise-address={{ hostvars[groups['kube-master'][0]].ansible_host }} --service-cidr 20.20.0.0/16
       #shell: kubeadm init --apiserver-advertise-address=10.92.128.0 --service-cidr 172.16.0.0/16 
       args:
         chdir: $HOME
