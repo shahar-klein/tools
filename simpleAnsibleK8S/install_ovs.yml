@@ -1,0 +1,19 @@
+- hosts: k8s-cluster
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: set apt to nvidia package cloud
+      shell: curl -s https://baefece184f8010e74aa58f88db3a6660f8e1eb2c21ac69e:@packages.nvidia.com/install/repositories/sdn/nv-ovs-2-11-2/script.deb.sh | bash
+    - name: install openvswitch-common
+      apt:
+        name: openvswitch-common
+        state: present
+    - name: install openvswitch-switch
+      apt:
+        name: openvswitch-switch
+        state: present
+    - name: install ovn-common
+      apt:
+        name: ovn-common
+        state: present
+
