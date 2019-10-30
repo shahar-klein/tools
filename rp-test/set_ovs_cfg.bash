@@ -101,8 +101,8 @@ tc_ct_setup() {
 
 
 	set +e
-	tc qdisc del dev ${RP_PRIV_LEG_DEV} ingress 2>/dev/null
-	tc qdisc del dev ${RP_PUB_LEG_DEV} ingress 2/dev/null
+	tc qdisc del dev ${RP_PRIV_LEG_DEV} ingress
+	tc qdisc del dev ${RP_PUB_LEG_DEV} ingress
 	set -e
 	tc qdisc add dev ${RP_PRIV_LEG_DEV} ingress
 	tc qdisc add dev ${RP_PUB_LEG_DEV} ingress
