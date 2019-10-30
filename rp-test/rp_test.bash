@@ -879,9 +879,17 @@ ovs_forward_nat_setup() {
 }
 
 tc_forward_ct_setup() {
+	offload=$1
+
+	if [ $offload = "yes" ]; then
+		logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV hw-tc-offload on"
+		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
+	fi
 
 	# Remove need for $BRPRIV $BRPUB $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_POR
+	set -x
 	ssh $RP bash $TOOLS/set_ovs_cfg.bash tc_ct_setup $MULTI_IP $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $NUM_SESSIONS $GFN_PUB_PORT_START $GS_PORT_START $LOADER_DEV_MAC $INITIATOR_DEV_MAC $RP_PRIV_LEG_IP $RP_PUB_LEG_IP
+	set +x
 
 	if [ $MULTI_IP = no ] ; then
 		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
@@ -924,7 +932,10 @@ setup_dp_profile() {
 			linux_forward_nat_setup
 			;;
 		tc_fwd_ct)
-			tc_forward_ct_setup
+			tc_forward_ct_setup "no"
+			;;
+		tc_fwd_ct_offload)
+			tc_forward_ct_setup "yes"
 			;;
 		ovs_fwd)
 			setup_vm_ovs $nic_mode "no"
