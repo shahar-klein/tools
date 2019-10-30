@@ -100,8 +100,10 @@ tc_ct_setup() {
 	RP_PUB_LEG_IP=${17}
 
 
+	set +e
 	tc qdisc del dev ${RP_PRIV_LEG_DEV} ingress 2>/dev/null
 	tc qdisc del dev ${RP_PUB_LEG_DEV} ingress 2/dev/null
+	set -e
 	tc qdisc add dev ${RP_PRIV_LEG_DEV} ingress
 	tc qdisc add dev ${RP_PUB_LEG_DEV} ingress
 	if [ $IS_MULTI = "no" ] ; then 
@@ -250,27 +252,28 @@ RP_PUB_PATCH_PORT=$8
 shift
 shift
 
-if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
-	rm -f /tmp/flows.${BRPRIV}.$$
+if [ $mode != "tc_ct_setup" ] ; then 
+	if [ -f /tmp/flows.${BRPRIV}.$$ ]; then
+		rm -f /tmp/flows.${BRPRIV}.$$
+	fi
+	
+	if [ -f /tmp/flows.${BRPUB}.$$ ]; then
+		rm -f /tmp/flows.${BRPUB}.$$
+	fi
+	
+	#Add ARP rules
+	echo "priority=10,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
+	echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPRIV}.$$
+	echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPRIV}.$$
+	echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPRIV}.$$
+	       
+	       
+	# Add ARP to the pub bridge
+	echo "priority=10,arp,action=normal" >> /tmp/flows.${BRPUB}.$$
+	echo "priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPUB}.$$
+	echo "priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPUB}.$$
+	echo "priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPUB}.$$
 fi
-
-if [ -f /tmp/flows.${BRPUB}.$$ ]; then
-	rm -f /tmp/flows.${BRPUB}.$$
-fi
-
-#Add ARP rules
-echo "priority=10,arp,action=normal" >> /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPRIV}.$$
-echo "priority=50,in_port=$RP_PRIV_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPRIV}.$$
-       
-       
-# Add ARP to the pub bridge
-echo "priority=10,arp,action=normal" >> /tmp/flows.${BRPUB}.$$
-echo "priority=50,in_port=$RP_PUB_PATCH_PORT,arp,action=drop" >> /tmp/flows.${BRPUB}.$$
-echo "priority=50,in_port=$RP_PUB_PATCH_PORT,ip6,action=drop" >> /tmp/flows.${BRPUB}.$$
-echo "priority=50,in_port=$RP_PUB_PATCH_PORT,dl_dst=ff:ff:ff:ff:ff:ff,action=drop" >> /tmp/flows.${BRPUB}.$$
-
 case  $mode in
 	ovs_forward_setup)
 		ovs_forward_setup $@
@@ -281,11 +284,16 @@ case  $mode in
 	ovs_forward_ct_setup)
 		ovs_forward_ct_setup $@
 		;;
+	tc_ct_setup)
+		tc_ct_setup $@
+		;;
 esac
 
-# XXX Check if we can add these to the file as well.
-ovs-ofctl del-flows ${BRPRIV}
-ovs-ofctl del-flows ${BRPUB}
-
-ovs-ofctl add-flows ${BRPRIV} /tmp/flows.${BRPRIV}.$$
-ovs-ofctl add-flows ${BRPUB} /tmp/flows.${BRPUB}.$$
+if [ $mode != "tc_ct_setup" ] ; then 
+	# XXX Check if we can add these to the file as well.
+	ovs-ofctl del-flows ${BRPRIV}
+	ovs-ofctl del-flows ${BRPUB}
+	
+	ovs-ofctl add-flows ${BRPRIV} /tmp/flows.${BRPRIV}.$$
+	ovs-ofctl add-flows ${BRPUB} /tmp/flows.${BRPUB}.$$
+fi
