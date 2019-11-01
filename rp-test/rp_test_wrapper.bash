@@ -33,7 +33,7 @@ RUNS=rp_test.runs
 # From the following possibilities
 #MODES="ct pt sriov bm ha pt_multip ct_multip"
 #PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
-#DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload"
+#DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload tc_fwd_ct"
 #NUM_SESSIONS="100 500 1000"
 #CPU_AFFINITIES="4 8"
 #CPU_BINDINGS="dangling pinned"
