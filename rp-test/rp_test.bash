@@ -422,7 +422,7 @@ setup_vm() {
 
 
 	set +e
-	ssh $RP "cd $TOOLS ; git reset --hard ; git pull --force --no-edit" 2>&1 > /dev/null
+	# ssh $RP "cd $TOOLS ; git reset --hard ; git pull --force --no-edit" 2>&1 > /dev/null
 	if [ $MULTI_IP = yes ] ; then
 		logCMD "ssh $RP ip route add $PUB_NET via $RP_PUB_LEG_IP dev $RP_PUB_LEG_DEV 2>&1 > /dev/null"
 		logCMD "ssh $RP ip route add $PRIV_NET via $RP_PRIV_LEG_IP dev $RP_PRIV_LEG_DEV 2>&1 > /dev/null"
@@ -872,9 +872,23 @@ ovs_forward_nat_setup() {
 		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	else
-		
 		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
 		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	fi
+
+}
+
+tc_forward_ct_setup() {
+
+	# Remove need for $BRPRIV $BRPUB $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_POR
+	ssh $RP bash $TOOLS/set_ovs_cfg.bash tc_ct_setup $MULTI_IP $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $NUM_SESSIONS $GFN_PUB_PORT_START $GS_PORT_START $LOADER_DEV_MAC $INITIATOR_DEV_MAC $RP_PRIV_LEG_IP $RP_PUB_LEG_IP
+
+	if [ $MULTI_IP = no ] ; then
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	else
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  100 -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
 	fi
 
 }
@@ -908,6 +922,9 @@ setup_dp_profile() {
 			;;
 		linux_fwd_nat)
 			linux_forward_nat_setup
+			;;
+		tc_fwd_ct)
+			tc_forward_ct_setup
 			;;
 		ovs_fwd)
 			setup_vm_ovs $nic_mode "no"
