@@ -19,20 +19,35 @@ type OneIntf struct {
 	tx_bytes1 uint64
 	tx_packets1 uint64
 	rx_drops1 uint64
+	rx_bytes2 uint64
+	rx_packets2 uint64
+	tx_bytes2 uint64
+	tx_packets2 uint64
+	rx_drops2 uint64
 }
 
-func (self *OneIntf) Collect() {
+func (self *OneIntf) Collect(c int) {
 
 	stats, err := self.e.Stats(self.intf)
         if err != nil {
                 panic(err.Error())
         }
-	self.rx_bytes1   = stats["rx_bytes"]
-	self.rx_packets1 = stats["rx_packets"]
-	self.tx_bytes1   = stats["tx_bytes"]
-	self.tx_packets1 = stats["tx_packets"]
-	self.rx_drops1   = stats["rx_out_of_buffer"]
-	fmt.Println("rx_packets:", self.rx_packets1)
+	if c == 1 {
+		fmt.Println("collect 1")
+		self.rx_bytes1   = stats["rx_bytes"]
+		self.rx_packets1 = stats["rx_packets"]
+		self.tx_bytes1   = stats["tx_bytes"]
+		self.tx_packets1 = stats["tx_packets"]
+		self.rx_drops1   = stats["rx_out_of_buffer"]
+	}
+	if c == 2 {
+		fmt.Println("collect 2")
+		self.rx_bytes2   = stats["rx_bytes"]
+		self.rx_packets2 = stats["rx_packets"]
+		self.tx_bytes2   = stats["tx_bytes"]
+		self.tx_packets2 = stats["tx_packets"]
+		self.rx_drops2   = stats["rx_out_of_buffer"]
+	}
 
 
 
@@ -47,7 +62,6 @@ func (self *OneIntf) Init() {
 	}
 	//defer self.e.Close()
 	self.e = e
-	//time.Sleep(time.Duration(self.deltaT)*1000 * time.Millisecond)
 
 }
 
@@ -70,13 +84,21 @@ func main() {
 		intfs = append(intfs, intf)
 	}
 	//fmt.Println(intfs[0].intf, intfs[1], deltaT)
-	//for {
-	for i:=0; i < numIntfs;  i++ {
-		intfs[i].Init()
+	for {
+		for i:=0; i < numIntfs;  i++ {
+			intfs[i].Init()
+		}
+		for i:=0; i < numIntfs;  i++ {
+		       go intfs[i].Collect(1)
+		}
+		time.Sleep(time.Duration(deltaT)*1000 * time.Millisecond)
+		for i:=0; i < numIntfs;  i++ {
+		       go intfs[i].Collect(2)
+		}
+		fmt.Println("delta rx=", intfs[0].rx_packets2, intfs[0].rx_packets1)
 	}
-	for i:=0; i < numIntfs;  i++ {
-	       go intfs[i].Collect()
-	}
+
+
 	//}
 
 	time.Sleep(time.Duration(3)*1000 * time.Millisecond)
