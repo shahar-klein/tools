@@ -14,16 +14,14 @@ type OneIntf struct {
 	e  *ethtool.Ethtool
 	intf		string
 	deltaT		int
-	rx_bytes1 uint64
+	rx_pkts_nic1 uint64
 	rx_packets1 uint64
-	tx_bytes1 uint64
+	tx_pkts_nic1 uint64
 	tx_packets1 uint64
-	rx_drops1 uint64
-	rx_bytes2 uint64
+	rx_pkts_nic2 uint64
 	rx_packets2 uint64
-	tx_bytes2 uint64
+	tx_pkts_nic2 uint64
 	tx_packets2 uint64
-	rx_drops2 uint64
 }
 
 func (self *OneIntf) Collect(c int) {
@@ -33,20 +31,16 @@ func (self *OneIntf) Collect(c int) {
                 panic(err.Error())
         }
 	if c == 1 {
-		fmt.Println("collect 1")
-		self.rx_bytes1   = stats["rx_bytes"]
-		self.rx_packets1 = stats["rx_packets"]
-		self.tx_bytes1   = stats["tx_bytes"]
-		self.tx_packets1 = stats["tx_packets"]
-		self.rx_drops1   = stats["rx_out_of_buffer"]
+		self.rx_pkts_nic1   = stats["rx_pkts_nic"]
+		self.rx_packets1    = stats["rx_packets"]
+		self.tx_pkts_nic1   = stats["tx_pkts_nic"]
+		self.tx_packets1    = stats["tx_packets"]
 	}
 	if c == 2 {
-		fmt.Println("collect 2")
-		self.rx_bytes2   = stats["rx_bytes"]
-		self.rx_packets2 = stats["rx_packets"]
-		self.tx_bytes2   = stats["tx_bytes"]
-		self.tx_packets2 = stats["tx_packets"]
-		self.rx_drops2   = stats["rx_out_of_buffer"]
+		self.rx_pkts_nic2   = stats["rx_pkts_nic"]
+		self.rx_packets2    = stats["rx_packets"]
+		self.tx_pkts_nic2   = stats["tx_pkts_nic"]
+		self.tx_packets2    = stats["tx_packets"]
 	}
 
 
@@ -95,7 +89,12 @@ func main() {
 		for i:=0; i < numIntfs;  i++ {
 		       go intfs[i].Collect(2)
 		}
-		fmt.Println("delta rx=", intfs[0].rx_packets2, intfs[0].rx_packets1)
+		time.Sleep(time.Duration(1)*100 * time.Millisecond)
+		fmt.Println(time.Now())
+		fmt.Println(intfs[0].intf, "delta rx=", intfs[0].rx_packets2-intfs[0].rx_packets1)
+		fmt.Println(intfs[1].intf, "delta tx=", intfs[1].tx_packets2-intfs[1].tx_packets1)
+		fmt.Println(intfs[0].intf, "delta nic rx=", intfs[0].rx_pkts_nic2-intfs[0].rx_pkts_nic1)
+		fmt.Println(intfs[1].intf, "delta nic tx=", intfs[1].tx_pkts_nic2-intfs[1].tx_pkts_nic1)
 	}
 
 
