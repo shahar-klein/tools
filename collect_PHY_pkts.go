@@ -22,6 +22,10 @@ type OneIntf struct {
 	rx_packets2 uint64
 	tx_pkts_nic2 uint64
 	tx_packets2 uint64
+	rx_dropped1 uint64
+	rx_dropped2 uint64
+	tx_dropped1 uint64
+	tx_dropped2 uint64
 }
 
 func (self *OneIntf) Collect(c int) {
@@ -35,12 +39,16 @@ func (self *OneIntf) Collect(c int) {
 		self.rx_packets1    = stats["rx_packets"]
 		self.tx_pkts_nic1   = stats["tx_pkts_nic"]
 		self.tx_packets1    = stats["tx_packets"]
+		self.rx_dropped1     = stats["rx_dropped"]	
+		self.tx_dropped1     = stats["tx_dropped"]	
 	}
 	if c == 2 {
 		self.rx_pkts_nic2   = stats["rx_pkts_nic"]
 		self.rx_packets2    = stats["rx_packets"]
 		self.tx_pkts_nic2   = stats["tx_pkts_nic"]
 		self.tx_packets2    = stats["tx_packets"]
+		self.rx_dropped2     = stats["rx_dropped"]	
+		self.tx_dropped2     = stats["tx_dropped"]	
 	}
 
 
@@ -95,6 +103,8 @@ func main() {
 		fmt.Println(intfs[1].intf, "delta tx=", intfs[1].tx_packets2-intfs[1].tx_packets1)
 		fmt.Println(intfs[0].intf, "delta nic rx=", intfs[0].rx_pkts_nic2-intfs[0].rx_pkts_nic1)
 		fmt.Println(intfs[1].intf, "delta nic tx=", intfs[1].tx_pkts_nic2-intfs[1].tx_pkts_nic1)
+		fmt.Println(intfs[0].intf, "delta rx dropped=", intfs[0].rx_dropped2-intfs[0].rx_dropped1)
+		fmt.Println(intfs[1].intf, "delta tx dropped=", intfs[1].tx_dropped2-intfs[1].tx_dropped1)
 	}
 
 
