@@ -97,12 +97,12 @@ func main() {
 		}
 		time.Sleep(time.Duration(1)*100 * time.Millisecond)
 		fmt.Println(time.Now())
-		fmt.Println(intfs[0].intf, "delta rx=", intfs[0].rx_packets2-intfs[0].rx_packets1)
-		fmt.Println(intfs[1].intf, "delta tx=", intfs[1].tx_packets2-intfs[1].tx_packets1)
-		fmt.Println(intfs[0].intf, "delta nic rx=", intfs[0].rx_pkts_nic2-intfs[0].rx_pkts_nic1)
-		fmt.Println(intfs[1].intf, "delta nic tx=", intfs[1].tx_pkts_nic2-intfs[1].tx_pkts_nic1)
-		fmt.Println(intfs[0].intf, "delta rx dropped=", intfs[0].rx_dropped2-intfs[0].rx_dropped1)
-		fmt.Println(intfs[1].intf, "delta tx dropped=", intfs[1].tx_dropped2-intfs[1].tx_dropped1)
+		fmt.Println(intfs[0].intf, "delta rx=", intfs[0].rx_packets2-intfs[0].rx_packets1, intfs[0].rx_packets2, intfs[0].rx_packets1)
+		fmt.Println(intfs[1].intf, "delta tx=", intfs[1].tx_packets2-intfs[1].tx_packets1, intfs[1].tx_packets2, intfs[1].tx_packets1)
+		fmt.Println(intfs[0].intf, "delta NIC rx=", intfs[0].rx_pkts_nic2-intfs[0].rx_pkts_nic1, intfs[0].rx_pkts_nic2, intfs[0].rx_pkts_nic1)
+		fmt.Println(intfs[1].intf, "delta NIC tx=", intfs[1].tx_pkts_nic2-intfs[1].tx_pkts_nic1, intfs[1].tx_pkts_nic2, intfs[1].tx_pkts_nic1)
+		fmt.Println(intfs[0].intf, "delta rx dropped=", intfs[0].rx_dropped2-intfs[0].rx_dropped1, intfs[0].rx_dropped2, intfs[0].rx_dropped1)
+		fmt.Println(intfs[1].intf, "delta tx dropped=", intfs[1].tx_dropped2-intfs[1].tx_dropped1, intfs[1].tx_dropped2, intfs[1].tx_dropped1)
 	}
 
 	time.Sleep(time.Duration(3)*1000 * time.Millisecond)
