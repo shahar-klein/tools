@@ -28,7 +28,24 @@ type OneIntf struct {
 	tx_dropped2 uint64
 }
 
+func (self *OneIntf) Init() {
+	//init
+	e, err := ethtool.NewEthtool()
+	if err != nil {
+		panic(err.Error())
+	}
+	//defer e.Close()
+	self.e = e
+
+}
+
 func (self *OneIntf) Collect(c int) {
+	e, err := ethtool.NewEthtool()
+	if err != nil {
+		panic(err.Error())
+	}
+	self.e = e
+	defer self.e.Close()
 
 	stats, err := self.e.Stats(self.intf)
         if err != nil {
@@ -51,22 +68,7 @@ func (self *OneIntf) Collect(c int) {
 		self.tx_dropped2     = stats["tx_dropped"]	
 	}
 
-
-
 }
-
-
-func (self *OneIntf) Init() {
-	//init
-	e, err := ethtool.NewEthtool()
-	if err != nil {
-		panic(err.Error())
-	}
-	//defer self.e.Close()
-	self.e = e
-
-}
-
 
 func main() {
 
@@ -85,11 +87,7 @@ func main() {
 		intf := OneIntf{intf: os.Args[i+1], deltaT: deltaT}
 		intfs = append(intfs, intf)
 	}
-	//fmt.Println(intfs[0].intf, intfs[1], deltaT)
 	for {
-		for i:=0; i < numIntfs;  i++ {
-			intfs[i].Init()
-		}
 		for i:=0; i < numIntfs;  i++ {
 		       go intfs[i].Collect(1)
 		}
@@ -106,9 +104,6 @@ func main() {
 		fmt.Println(intfs[0].intf, "delta rx dropped=", intfs[0].rx_dropped2-intfs[0].rx_dropped1)
 		fmt.Println(intfs[1].intf, "delta tx dropped=", intfs[1].tx_dropped2-intfs[1].tx_dropped1)
 	}
-
-
-	//}
 
 	time.Sleep(time.Duration(3)*1000 * time.Millisecond)
 	select  {}
