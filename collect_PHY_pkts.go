@@ -99,6 +99,7 @@ func main() {
 		fmt.Println(time.Now())
 		fmt.Println(intfs[0].intf, "delta rx=", intfs[0].rx_packets2-intfs[0].rx_packets1, intfs[0].rx_packets2, intfs[0].rx_packets1)
 		fmt.Println(intfs[1].intf, "delta tx=", intfs[1].tx_packets2-intfs[1].tx_packets1, intfs[1].tx_packets2, intfs[1].tx_packets1)
+		fmt.Println("RX->TX:", (intfs[0].rx_packets2-intfs[0].rx_packets1)-(intfs[1].tx_packets2-intfs[1].tx_packets1))
 		fmt.Println(intfs[0].intf, "delta NIC rx=", intfs[0].rx_pkts_nic2-intfs[0].rx_pkts_nic1, intfs[0].rx_pkts_nic2, intfs[0].rx_pkts_nic1)
 		fmt.Println(intfs[1].intf, "delta NIC tx=", intfs[1].tx_pkts_nic2-intfs[1].tx_pkts_nic1, intfs[1].tx_pkts_nic2, intfs[1].tx_pkts_nic1)
 		fmt.Println(intfs[0].intf, "delta rx dropped=", intfs[0].rx_dropped2-intfs[0].rx_dropped1, intfs[0].rx_dropped2, intfs[0].rx_dropped1)
