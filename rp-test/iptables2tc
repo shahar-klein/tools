@@ -51,6 +51,9 @@ TC filters for stateful rules:
 -----------------------------
 Corresponding TC stateful rule for the above Video session (12026 -> 10.8.169.17:47998)
 
+tc qdisc add dev ${RP_PRIV_DEV} ingress
+tc qdisc add dev ${RP_PUB_DEV} ingress
+
 Public -> Private
 ------------------
 	# Chain 0, packet enters public side, start tracking in Zone 2
@@ -61,8 +64,8 @@ Public -> Private
 	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est  action ct clear pipe action ct zone 3 nat pipe action goto chain 3
 
 	# Chain 3, SNAT in Zone 3 and forward after adjusting TTL (add 255 => add -1)
-	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
-	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
 
 Private -> Public
 -----------------
@@ -73,4 +76,4 @@ Private -> Public
 	tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
 
 	# Chain 5, established flows proceed to forwarding after adjusting TTL
-tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit exmunge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${PUB_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit exmunge eth src set ${RP_PUB_MAC} munge eth dst set ${PUB_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
