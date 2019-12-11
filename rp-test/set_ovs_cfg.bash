@@ -79,6 +79,7 @@ ovs_forward_nat_setup() {
 	fi
 }
 
+# TTL add 255 ==> add -1 ==> dec 1
 tc_ct_setup() {
 
 	BRPRIV=$1
@@ -121,9 +122,9 @@ tc_ct_setup() {
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est  action ct clear pipe action ct zone 3 nat pipe action goto chain 3
 
 		# Chain 3, SNAT in Zone 3 and forward
-		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
 
-		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
 
 
 		# Chain 0, packet enters private side, start tracking in Zone 3 for SNAT
@@ -133,7 +134,7 @@ tc_ct_setup() {
 		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
 
 		# Chain 5, established flows proceed to forwarding
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
 
 
 	else
@@ -153,8 +154,8 @@ tc_ct_setup() {
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 3 nat pipe action goto chain 3
 
 		# Chain 3, SNAT in Zone 3 and forward
-		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
-		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
 
 
 		# Chain 0, packet enters private side, start tracking in Zone 3 for SNAT
@@ -164,7 +165,7 @@ tc_ct_setup() {
 		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
 
 		# Chain 5, established flows proceed to forwarding
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
 
 	fi
 }

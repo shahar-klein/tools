@@ -41,12 +41,12 @@ RUNS=rp_test.runs
 # Running the following subset
 MODES="ct_multip"
 PROFILES="NONE"
-BUFFER_SIZE="8192"
+BUFFER_SIZE="4096 8192"
 CPU_BINDINGS="pinned"
-CPU_AFFINITIES="8"
+CPU_AFFINITIES="4 8"
 HASH_FUNC="toeplitz"
 DATAPATHS="tc_fwd_ct_offload"
-NUM_SESSIONS="1" 
+NUM_SESSIONS="500 1000" 
 BANDWIDTH_PER_SESSION=20m
 
 outline_all() {

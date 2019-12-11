@@ -1,0 +1,76 @@
+
+E.g. or the port<->GS_IP:port Mapping:
+12026 -> 10.8.169.17:47998
+
+which will have the following DNAT IPtables entries:
+	-A PREROUTING -i eth1 -p udp -m udp --dport 12026 -m comment --comment "{\'usage\': \'VIDEO\', \'session_time\': \'2019-04-18T15:36:29.861361\', \'session_id\': \'9d7cc74d-7e97-519c-b6e6-e40626ed0750\'}" -j DNAT --to-destination 10.8.169.17:47998
+
+Along with the generic IPtables SNAT entries:
+	-A POSTROUTING -o eth1 -m state ! --state INVALID -j SNAT --to-source 8.7.235.52
+	-A POSTROUTING -o eth0 -m state ! --state INVALID -j SNAT --to-source 10.8.168.10
+
+RP setup:
+--------
+
+		
+		+-------------------------------------------------------+
+		|							|
+		|  			RP				|
+		|							|
+		+-------------------------------------------------------+
+			|					|
+			|eth0					|eth1
+			|10.8.168.10				|8.7.235.52
+			|aa:bb:cc:dd:ee:ff			|uu:vv:ww:xx:yy:zz
+
+
+	eth0 and eth1 host the GW IP address for the private and public side.
+
+Parameters for TC filters:
+-------------------------
+
+# client port to GS_IP:port mapping
+GC_PORT=12026
+GS_PORT=47998
+GS_IP=10.8.169.17
+GC_IP=8.8.8.8 (External Client/NAT'd IP)
+
+# Static parameters
+RP_PRIV_DEV=eth0
+RP_PRIV_IP=10.8.168.10
+RP_PRIV_MAC=aa:bb:cc:dd:ee:ff
+RP_PUB_DEV=eth1
+RP_PUB_IP=8.7.235.52
+RP_PUB_MAC=uu:vv:ww:xx:yy:zz
+
+# Parameters to be determined from ARP cache (statically or dynamically)
+GS_IP_MAC=bb:cc:dd:ee:ff:gg
+PUB_ROUTER_MAC=cc:dd:ee:ff:gg:hh (The default router on the public side to get to the external client)
+
+TC filters for stateful rules:
+-----------------------------
+Corresponding TC stateful rule for the above Video session (12026 -> 10.8.169.17:47998)
+
+Public -> Private
+------------------
+	# Chain 0, packet enters public side, start tracking in Zone 2
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 2 nat pipe action goto chain 2
+
+	# Chain 2, DNAT in Zone 2, start tracking in Zone 3 for SNAT
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT ct_state +trk+new action ct commit zone 2 nat dst addr ${GS_IP} port $GS_PORT pipe action ct clear pipe action ct zone 3 pipe action goto chain 3
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est  action ct clear pipe action ct zone 3 nat pipe action goto chain 3
+
+	# Chain 3, SNAT in Zone 3 and forward after adjusting TTL (add 255 => add -1)
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+	tc filter add dev ${RP_PUB_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${LOADER_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+
+Private -> Public
+-----------------
+	# Chain 0, packet enters private side, start tracking in Zone 3 for SNAT
+	tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 3 nat pipe action goto chain 4
+
+	# Chain 4, established flows proceed to Zone 2 after SNAT for DNAT
+	tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
+
+	# Chain 5, established flows proceed to forwarding after adjusting TTL
+tc filter add dev ${RP_PRIV_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit exmunge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${PUB_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}

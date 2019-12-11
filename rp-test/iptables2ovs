@@ -1,0 +1,73 @@
+
+E.g. or the port<->GS_IP:port Mapping:
+12026 -> 10.8.169.17:47998
+
+which will have the following DNAT IPtables entries:
+	-A PREROUTING -i eth1 -p udp -m udp --dport 12026 -m comment --comment "{\'usage\': \'VIDEO\', \'session_time\': \'2019-04-18T15:36:29.861361\', \'session_id\': \'9d7cc74d-7e97-519c-b6e6-e40626ed0750\'}" -j DNAT --to-destination 10.8.169.17:47998
+
+Along with the generic IPtables SNAT entries:
+	-A POSTROUTING -o eth1 -m state ! --state INVALID -j SNAT --to-source 8.7.235.52
+	-A POSTROUTING -o eth0 -m state ! --state INVALID -j SNAT --to-source 10.8.168.10
+
+OVS bridge setup:
+------------------
+
+		
+			|brpriv					|brpub
+			|10.8.168.10				|8.7.235.52
+			|aa:bb:cc:dd:ee:ff			|uu:vv:ww:xx:yy:zz
+		+---------------+			+---------------+
+		|		|     	       pub-patch|		|
+		|  brpriv	|-----------------------|   brpub	|
+		|		|priv-patch		|		|
+		+---------------+			+---------------+
+			|					|
+			|eth0					|eth1
+
+
+Where:
+	brpriv and brpub OVS bridges
+	brpriv and brpub are also internal ports that host the GW IP address for the private and public side.
+
+Parameters for OVS flows:
+------------------------
+
+RP_PUB_PATCH_PORT=pub-patch
+RP_PRIV_PATCH_PORT=priv-patch
+
+# client port to GS_IP:port mapping
+GC_PORT=12026
+GS_PORT=47998
+GS_IP=10.8.169.17
+GC_IP=8.8.8.8 (External Client/NAT'd IP)
+
+# Static parameters
+RP_PRIV_DEV=eth0
+RP_PRIV_IP=10.8.168.10
+RP_PRIV_MAC=aa:bb:cc:dd:ee:ff
+RP_PUB_DEV=eth1
+RP_PUB_IP=8.7.235.52
+RP_PUB_MAC=uu:vv:ww:xx:yy:zz
+
+# Parameters to be determined from ARP cache (statically or dynamically)
+GS_IP_MAC=bb:cc:dd:ee:ff:gg
+PUB_ROUTER_MAC=cc:dd:ee:ff:gg:hh (The default router on the public side to get to the external client)
+
+OVS Stateful/Connection Tracking rule:
+-------------------------------------
+Corresponding OVS stateful rule for the above Video session (12026 -> 10.8.169.17:47998)
+
+	# Public -> Private
+	ovs-vsctl add-flow brpub priority=100,in_port=$RP_PUB_DEV,udp,action=ct(zone=10,nat,table=11)
+	ovs-vsctl add-flow brpub table=11,priority=100,udp,tp_dst=$GC_PORT,ct_state=+trk+new,action=ct(commit,zone=10,nat(dst=$GS_IP:$GS_PORT)),$RP_PUB_PATCH_PORT
+	ovs-vsctl add-flow brpub table=11,priority=100,ct_state=+trk+est,action=$RP_PUB_PATCH_PORT
+	ovs-vsctl add-flow brpriv priority=100,in_port=$RP_PRIV_PATCH_PORT,udp,action=ct_clear,ct(zone=12,nat,table=13)
+	ovs-vsctl add-flow brpriv table=13,udp,tp_dst=$GS_PORT,ct_state=+trk+new,action=ct(commit,zone=12,nat(src=$RP_PRIV_IP)),mod_dl_src=$RP_PRIV_LEG_MAC,mod_dl_dst=$GS_IP_MAC,normal
+	ovs-vsctl add-flow brpriv table=13,ct_state=+trk+est,action=mod_dl_src=$RP_PRIV_MAC,mod_dl_dst=$GS_IP_MAC,normal
+	
+	# Private -> Public
+	ovs-vsctl add-flow brpriv priority=100,in_port=$RP_PRIV_DEV,udp,action=ct(zone=12,nat,table=14)
+	ovs-vsctl add-flow brpriv table=14,priority=100,udp,ct_state=+trk+est,action=$RP_PRIV_PATCH_PORT
+
+	ovs-vsctl add-flow brpub priority=100,in_port=$RP_PUB_PATCH_PORT,udp,action=ct_clear,ct(zone=10,nat,table=15)
+	ovs-vsctl add-flow brpub table=15,priority=100,ct_state=+trk+est,action=mod_nw_src=$RP_PUB_IP,mod_dl_src=$RP_PUB_LEG_MAC,mod_dl_dst=$PUB_ROUTER_MAC,normal
