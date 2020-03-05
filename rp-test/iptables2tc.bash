@@ -15,6 +15,9 @@
 # Convert an existing iptable rule (say for port 8000) using:
 # 	bash iptables2tc.bash run 8000
 
+echo "Make sure we have all the data before running, then delete this line and next one"
+exit 1
+
 set -e
 
 # TTL add 255 ==> add -1 ==> dec 1
