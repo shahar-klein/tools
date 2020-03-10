@@ -15,9 +15,6 @@
 # Convert an existing iptable rule (say for port 8000) using:
 # 	bash iptables2tc.bash run 8000
 
-echo "Make sure we have all the data before running, then delete this line and next one"
-exit 1
-
 set -e
 
 # TTL add 255 ==> add -1 ==> dec 1
@@ -25,6 +22,9 @@ tc_ct_setup() {
 	CMD=$1
 	GC_PORT=$2
 	GS_IP=$3
+	CLI_IP=$4
+	CLI_PORT=$5
+
 	LOADER_IP=5.5.5.5
 	LOADER_DEV_MAC=98:03:9b:48:1f:fc
 	RP_PRIV_LEG_DEV=enp6s0
@@ -67,30 +67,36 @@ tc_ct_setup() {
 		# Chain 0, packet enters private side, start tracking in Zone 3 for SNAT
 		# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 3 nat pipe action goto chain 4
 
-		# 4.a Chain 4, new flows are dropped
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action drop
 
 		# 4.b Chain 4, established flows proceed to Zone 2 after SNAT for DNAT
 		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
 
-		# 5 Chain 5, established flows proceed to forwarding
+
 		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
 	else
 		# remove existing rules for the port
 		set +e
 		iptables -n -L -t nat --line-number | grep dpt:${GC_PORT} | awk '{print $1}' | xargs iptables -t nat -D PREROUTING
-		conntrack -D -p udp --dport ${GC_PORT}
 		set -e
 
 		# 1. Packet entering the public side for the dst_port we are interested in. 
-		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT ct_state -trk action ct clear pipe action ct zone 2 nat pipe action goto chain 2
+		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT action ct clear pipe action ct zone 2 nat pipe action goto chain 2
 
 		# 4. Packet entering the private side from the GS IP mapped to the port we are interested in.
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag src_ip ${GS_IP} ip_proto udp ct_state -trk action ct clear pipe action ct zone 3 nat pipe action goto chain 4
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $CLI_PORT action ct clear pipe action ct zone 3 nat pipe action goto chain 4
+
+		# 4.a Chain 4, new flows are tracked in the reverse direction
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp dst_port $CLI_PORT ct_state +trk+new action ct commit zone 3 nat dst addr ${CLI_IP} pipe action ct clear pipe action ct zone 2 pipe action goto chain 5
 
 		# 2.a Chain 2, DNAT in Zone 2, start tracking in Zone 3 for SNAT 
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT ct_state +trk+new action ct commit zone 2 nat dst addr ${GS_IP} port 47998 pipe action ct clear pipe action ct zone 3 pipe action goto chain 3
 
+		# 5 Chain 5, established flows proceed to forwarding
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp dst_port $CLI_PORT ct_state +trk+new action ct commit zone 2 nat src addr ${RP_PUB_LEG_IP} port $GC_PORT pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+		set +e
+		conntrack -D -p udp --dport ${GC_PORT}
+		conntrack -D -p udp --sport ${CLI_PORT}
+		set -e
 	fi
 
 }
@@ -104,15 +110,17 @@ then
 	exit 0
 fi
 CMD=$1
-TC_OFFLOAD_PORT=${2:-8000}
-GS_IP=$3
+TC_OFFLOAD_PORT=${2}
+#GS_IP=$3
 #IP_TABLE_PATH=/root/git/tools/1000ips
 #index=$((TC_OFFLOAD_PORT-PUB_START_PORT))
 #index=$((index+1))
 #GS_IP=`cat $IP_TABLE_PATH | head -${index} | tail -1`
-if [ -z $GS_IP ]
-then
-	GS_IP=`iptables -n -L -t nat  | grep ${TC_OFFLOAD_PORT} | tr -s " " | cut -d " " -f11| cut -d":" -f2`
-fi
-echo $1 $TC_OFFLOAD_PORT $GS_IP
-tc_ct_setup $1 $TC_OFFLOAD_PORT $GS_IP
+#if [ -z $GS_IP ]
+#then
+GS_IP=`iptables -n -L -t nat  | grep ${TC_OFFLOAD_PORT} | tr -s " " | cut -d " " -f11| cut -d":" -f2`
+#fi
+CLI_PORT=`conntrack -L --proto udp --dport  ${TC_OFFLOAD_PORT} -r ${GS_IP} | tr -s " " | cut -d " " -f6 | cut -d"=" -f2`
+CLI_IP=`conntrack -L --proto udp --dport  ${TC_OFFLOAD_PORT} -r ${GS_IP} | tr -s " " | cut -d " " -f4 | cut -d"=" -f2`
+echo $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP:$CLI_PORT
+tc_ct_setup $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP $CLI_PORT
