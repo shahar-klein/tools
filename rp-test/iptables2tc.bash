@@ -24,7 +24,7 @@ tc_ct_setup() {
 	GS_IP=$3
 	CLI_IP=$4
 	CLI_PORT=$5
-	CLI_GS_PORT=$6
+	RP_SNAT_PORT=$6
 
 #	LOADER_IP=5.5.5.5
 #	LOADER_DEV_MAC=98:03:9b:48:1f:fc
@@ -96,10 +96,10 @@ tc_ct_setup() {
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT action ct clear pipe action ct zone 2 nat pipe action goto chain 2
 
 		# 4. Packet entering the private side from the GS IP mapped to the port we are interested in.
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $CLI_GS_PORT action ct clear pipe action ct zone 3 nat pipe action goto chain 4
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp dst_port $RP_SNAT_PORT action ct clear pipe action ct zone 3 nat pipe action goto chain 4
 
 		# 4.a Chain 4, new flows are tracked in the reverse direction
-		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp dst_port $CLI_PORT ct_state +trk+new action ct commit zone 3 nat dst addr ${CLI_IP} port ${CLI_PORT} pipe action ct clear pipe action ct zone 2 nat pipe action goto chain 5
+		tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp dst_port $RP_SNAT_PORT ct_state +trk+new action ct commit zone 3 nat dst addr ${CLI_IP} port ${CLI_PORT} pipe action ct clear pipe action ct zone 2 nat pipe action goto chain 5
 
 		# 2.a Chain 2, DNAT in Zone 2, start tracking in Zone 3 for SNAT 
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp dst_port $GC_PORT ct_state +trk+new action ct commit zone 2 nat dst addr ${GS_IP} port 47998 pipe action ct clear pipe action ct zone 3 nat pipe action goto chain 3
@@ -131,6 +131,6 @@ GS_IP=`iptables -n -L -t nat  | grep ${TC_OFFLOAD_PORT} | tr -s " " | cut -d " "
 #fi
 CLI_PORT=`conntrack -L --proto udp --dport  ${TC_OFFLOAD_PORT} -r ${GS_IP} | tr -s " " | cut -d " " -f6 | cut -d"=" -f2`
 CLI_IP=`conntrack -L --proto udp --dport  ${TC_OFFLOAD_PORT} -r ${GS_IP} | tr -s " " | cut -d " " -f4 | cut -d"=" -f2`
-CLI_GS_PORT=`conntrack -L --src-nat --proto udp --dport=$TC_OFFLOAD_PORT | tr -s  " " | cut -d " " -f6 | cut -d "=" -f2`
-echo $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP:$CLI_PORT $CLI_GS_PORT
-tc_ct_setup $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP $CLI_PORT $CLI_GS_PORT
+RP_SNAT_PORT=`conntrack -L --src-nat --proto udp --dport=$TC_OFFLOAD_PORT | tr -s  " " | cut -d " " -f11 | cut -d "=" -f2`
+echo $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP:$CLI_PORT $RP_SNAT_PORT
+tc_ct_setup $1 $TC_OFFLOAD_PORT $GS_IP $CLI_IP $CLI_PORT $RP_SNAT_PORT
