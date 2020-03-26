@@ -1,0 +1,91 @@
+-A PREROUTING -i eth1 -p tcp -m tcp --dport 13360 ... -j DNAT --to-destination 10.8.169.17:48010
+-A PREROUTING -i eth1 -p udp -m udp --dport 12026 ... -j DNAT --to-destination 10.8.169.17:47998
+-A PREROUTING -i eth1 -p udp -m udp --dport 19142 ... -j DNAT --to-destination 10.8.169.17:48000
+-A PREROUTING -i eth1 -p udp -m udp --dport 13661 ... -j DNAT --to-destination 10.8.169.17:47999
+-A PREROUTING -i eth1 -p udp -m udp --dport 12271 ... -j DNAT --to-destination 10.8.169.17:48002
+
+[... is the commment in iptables today, in the form
+-m comment --comment "{\'usage\': \'VIDEO\', \:q'session_time\': \'2019-04-18T15:36:29.861361\', \'session_id\': \'9d7cc74d-7e97-519c-b6e6-e40626ed0750\'}"
+which is not supported in TC. So, if this is something that is used, we need to find a different way to do that
+
+----> PreRouting (eth1) -> dport == 12026 -> DNAT(10.8.169.17:47998)  => Linux Forwarding => eth0 (SNAT) -> 10.0.20.5:<sport>, 10.8.169.17:47998
+
+With TC this translates to:
+==========================
+1. filter on eth1 for dst port 12026
+2. action: DNAT to 10.8.169.17:47998
+3. action: SNAT to 10.0.20.5
+4. decrement TTL
+5. action: modify src MAC to that of 10.0.20.5 anddst MAC to that of the default router on the private side
+
+6. filter the packets coming back (via connection tracking)
+7. action : DNAT to CLIENT_IP:CLIENT_DST_PORT (via connection tracking)
+8. action: SNAT to 24.51.15.230 (via connection tracking)
+9. decrement TTL
+10. action: modify src MAC to that of 24.51.15.230 and dst MAC to that of the default router on the public side
+
+
+Which means we need to :
+======================
+1. Manage the connection tracking - which was done implicitly by iptables
+2. Provide Forwarding information (MAC address of default router/ game seat) - which was done by linux stack
+
+Managing Connection tracking:
+============================
+We'll use 2 Connection tracking zones for this.
+Zone 2  : For packets coming from the external client / public (this will initate the VIDEO session)
+Zone 3  : For packets coming from the Gameseat / private side (this will be the response)
+
+(We could have used 1 Zone, but that is a bit tricky since TC doesn't allow us to use SNAT and DNAT in the same
+rule)
+
+The flow looks like:
+===================						Zone 2.
+						+-------------------------------+
+			(1)			|new: dnat(10.8.169.17:47998)(7)|
+public side => start tracking in Zone 2 ->	|est: dnat	(3)		| -> clear CT state -> start tracking in Zone 3
+						+-------------------------------+ 				|
+												Zone 3		|
+												+-----------------------+
+												|new: snat(10.0.20.5)(4)|
+												|est : snat	(4)	|
+												+-----------------------+
+													|
+												modify src and dst MAC
+													|
+													V
+						Zone 3						    Game Seat
+						+---------------+
+			(2)			|		|
+private side -> start tracking in Zone 3->	|est: dnat(5)	| -> clear CT state -> start tracking in Zone 2
+						+---------------+					|
+												Zone 2	|
+												+---------------+
+												| est: snat (6)	|
+												+---------------+
+													|
+												modify src and dst MAC
+													|
+													V
+												  external client
+
+
+Which means we have 2 set of flows:
+==================================
+Static flows upfront:
+1. To track packets coming from the public side
+2. To track packets coming from the private side
+3. To dnat (zone 2) established flows from the public side
+4. To snat (zone 3) (new and est) flows going to the private side
+5. To dnat (zone 3) established flows coming from the private side
+6. To snat (zone 2) flows going to the public side
+
+Dynamic flows per VIDEO session
+7. To dnat (zone 2) new flows from the public side based on the destination port.
+
+Forwarding notes
+=================
+Since the TC rules modify the source and destination MAC address on both sides, we need
+1. the MAC address of the default router on the public and private side.
+2. If the default router changes, then the MAC address in all the existing rules needs to
+   change.
