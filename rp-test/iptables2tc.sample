@@ -1,0 +1,98 @@
+# This file lists the steps to add TC rules in place of iptable rules.
+
+# As an example for a client session, RP adds the following iptable
+# rules
+
+# -A PREROUTING -i eth1 -p tcp -m tcp --dport 13360 ... -j DNAT --to-destination 10.8.169.17:48010
+#-A PREROUTING -i eth1 -p udp -m udp --dport 12026 ... -j DNAT --to-destination 10.8.169.17:47998
+#-A PREROUTING -i eth1 -p udp -m udp --dport 19142 ... -j DNAT --to-destination 10.8.169.17:48000
+#-A PREROUTING -i eth1 -p udp -m udp --dport 13661 ... -j DNAT --to-destination 10.8.169.17:47999
+#-A PREROUTING -i eth1 -p udp -m udp --dport 12271 ... -j DNAT --to-destination 10.8.169.17:48002
+
+# Note. The above is from an RP from some time, so some rule, e.g.TCP, mightbe outdated.
+
+# This is in addition to the standard SNAT rule
+# 
+#-A POSTROUTING -o eth1 -m state ! --state INVALID -j SNAT --to-source 8.7.235.52
+#-A POSTROUTING -o eth0 -m state ! --state INVALID -j SNAT --to-source 10.8.168.10
+# where 8.7.235.52 is on the public side and 10.8.168.10 is on the private side.
+
+
+# The following shows steps to add TC rules for the above example, only the VIDEO sesson shown.
+# i.e A PREROUTING -i eth1 -p udp -m udp --dport 12026 ... -j DNAT --to-destination 10.8.169.17:47998
+
+# Getting host specific infrormation:
+
+### Given the RP configures SNAT with private and public IP, I suppose we can make this available
+# Private device MAC and IP, e.g. eth0 and 10.8.168.10
+RP_PRIV_LEG_DEV=eth0
+RP_PRIV_LEG_IP=10.0.20.5
+RP_PRIV_LEG_MAC=98:03:9b:c6:d2:d8
+
+# Public device MAC and IP, e.g. eth1 and 8.7.235.52
+RP_PUB_LEG_DEV=eth1
+RP_PUB_LEG_IP=24.51.15.230
+RP_PUB_LEG_MAC=98:03:9b:c6:d2:ac
+
+###
+### Ths needs to be obtained; e.g. using /proc/net/route and 
+### https://pypi.org/project/get-mac/
+### Potentially need to watch if this changes in order to change
+### rules. Default router is likely to be the same on both sides.
+### 
+RP_PRIV_DEF_ROUTER_MAC=00:1c:73:00:aa:80
+RP_PUB_DEF_ROUTER_MAC=$RP_PRIV_DEF_ROUTER_MAC
+
+# The port we are interested in, i.e. the client initiating the VIDEO session using this port.
+CLIENT_VIDEO_RP_PORT=12026
+# The Game seat for this client (12026)
+GS_IP=10.8.169.17
+GS_VIDEO_PORT=47998
+
+# Setting upfront rules (one-time only)
+
+	# Initialize TC
+	# tc qdisc add dev ${RP_PRIV_LEG_DEV} ingress
+	# tc qdisc add dev ${RP_PUB_LEG_DEV} ingress
+
+	# Packets coming from the external client, start tracking in Zone 2
+        # tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 2 nat pipe action goto chain 2
+
+	# Established sessions from external client -> DNAT and start tracking in Zone 3
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est  action ct clear pipe action ct zone 3 nat pipe action goto chain 3
+
+
+	# New or Established sessions from external client in Zone 3 -> SNAT -> Forward (modify MAC address, dec TTL and send on Private leg)
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${RP_PRIV_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${RP_PRIV_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+
+
+	# Packets coming from private side, start tracking in Zone 3
+	# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 3 nat pipe action goto chain 4
+
+	# Responses (i.e. established inZone 3) -> DNAT and send to Zone 2
+	# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 4 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action ct clear pipe action ct zone 2 nat pipe action goto chain 5
+
+	# Responses (i.e. established inZone 2) -> SNAT and Forward (modify MAC address, dec TTL and send on Publi leg)
+	# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${RP_PUB_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+
+
+# Per session setup (ie. when RP adds iptable rules today), e.g. port 12026
+
+	# New packet coming from external client, DNAT (zone 2) to associated (with CLIENT_VIDEO_RP_PORT) gane seat IP and video (in this example) port, and start tracking in Zone 3
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp dst_port  $CLIENT_VIDEO_RP_PORT ct_state +trk+new action ct commit zone 2 nat dst addr ${GS_IP} port $GS_VIDEO_PORT pipe action ct clear pipe action ct zone 3 pipe action goto chain 3
+
+----------------------------------
+
+TO remove a session from TC , e.g. for port 12026
+	# tc filter del dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 2 proto ip flower ip_flags nofrag ip_proto udp dst_port  $CLIENT_VIDEO_RP_PORT ct_state +trk+new 
+
+----------------------------------
+
+Notes if the Default Router MAC changes, we need to remove and re-add these rules:
+
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+new action ct commit zone 3 nat src addr ${RP_PRIV_LEG_IP} pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${RP_PRIV_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+	# tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 3 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PRIV_LEG_MAC} munge eth dst set ${RP_PRIV_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PRIV_LEG_DEV}
+
+	# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp ct_state +trk+est action pedit ex munge ip ttl add 255 pipe pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${RP_PUB_DEF_ROUTER_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+
