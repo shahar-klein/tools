@@ -1,0 +1,33 @@
+---
+- hosts: public
+  gather_facts: no
+  become: True
+  become_user: root
+  tasks:
+    - name: Copy sriov-public-net conf files
+      copy:
+        src: "{{ playbook_dir }}/../public/{{ inventory_hostname }}-sriov-public-net.conf"
+        dest: /etc/cni/net.d/10-sriov-public-net.conf
+  tags: public
+
+- hosts: storage
+  become: True
+  gather_facts: no
+  become_user: root
+  tasks:
+    - name: Copy sriov-storage-net conf files
+      copy:
+        src: "{{ playbook_dir }}/../storage/{{ inventory_hostname }}-sriov-storage-net.conf"
+        dest: /etc/cni/net.d/10-sriov-storage-net.conf
+  tags: storage
+
+- hosts: stream
+  become: True
+  gather_facts: no
+  become_user: root
+  tasks:
+    - name: Copy sriov-stream-net conf files
+      copy:
+        src: "{{ playbook_dir }}/../stream/{{ inventory_hostname }}-sriov-stream-net.conf"
+        dest: /etc/cni/net.d/10-sriov-stream-net.conf
+  tags: stream

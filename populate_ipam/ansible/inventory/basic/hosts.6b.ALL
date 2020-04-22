@@ -1,0 +1,26 @@
+[all]
+
+as-01-k8-master        ansible_host=10.0.0.94
+nd-sjc6b-bs-qtws6vs19210091-0a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.57
+nd-sjc6b-bs-qtws6vs19210091-0b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.62
+nd-sjc6b-bs-qtws6vs19210091-1a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.74
+nd-sjc6b-bs-qtws6vs19210091-1b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.75
+nd-sjc6b-bs-qtws6vs19210091-2a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.64
+nd-sjc6b-bs-qtws6vs19210091-2b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.69
+nd-sjc6b-bs-qtws6vs19210091-3a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.73
+nd-sjc6b-bs-qtws6vs19210091-3b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.76
+nd-sjc6b-bs-qtws6vs19210091-4a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.68
+nd-sjc6b-bs-qtws6vs19210091-4b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.66
+nd-sjc6b-bs-qtws6vs19210091-5a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.72
+nd-sjc6b-bs-qtws6vs19210091-5b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.71
+nd-sjc6b-bs-qtws6vs19210091-6a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.67
+nd-sjc6b-bs-qtws6vs19210091-6b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.70
+nd-sjc6b-bs-qtws6vs19210091-7a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.78
+nd-sjc6b-bs-qtws6vs19210091-8a.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.63
+nd-sjc6b-bs-qtws6vs19210091-8b.nd-sjc6b.nvmetal.net        ansible_host=10.0.7.65
+nd-sjc6b-ms-01.nd-sjc6b.nvmetal.net        ansible_host=10.0.0.111
+nd-sjc6b-ms-02.nd-sjc6b.nvmetal.net        ansible_host=10.0.0.112
+nd-sjc6b-ns-01.nd-sjc6b.nvmetal.net        ansible_host=10.0.0.121
+nd-sjc6b-ns-02.nd-sjc6b.nvmetal.net        ansible_host=10.0.0.122
+nd-sjc6b-ss-01        ansible_host=10.0.0.131
+
