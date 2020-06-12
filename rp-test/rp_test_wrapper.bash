@@ -33,7 +33,7 @@ RUNS=rp_test.runs
 # From the following possibilities
 #MODES="ct pt sriov bm ha pt_multip ct_multip"
 #PROFILES="NONE IP_FORWARDING_MULTI_STREAM_0_LOSS IP_FORWARDING_MULTI_STREAM_THROUGHPUT IP_FORWARDING_MULTI_STREAM_PACKET_RATE"
-#DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload tc_fwd_ct tc_fwd_ct_offload"
+#DATAPATHS="linux_fwd linux_fwd_nat ovs_fwd ovs_fwd_offload ovs_fwd_nat ovs_fwd_nat_offload ovs_fwd_ct ovs_fwd_ct_offload tc_fwd_ct tc_fwd_ct_offload tc_fwd_ct_pp_offload"
 #NUM_SESSIONS="100 500 1000"
 #CPU_AFFINITIES="4 8"
 #CPU_BINDINGS="dangling pinned"
@@ -41,13 +41,16 @@ RUNS=rp_test.runs
 # Running the following subset
 MODES="ct_multip"
 PROFILES="NONE"
-BUFFER_SIZE="4096 8192"
+BUFFER_SIZE="8192"
 CPU_BINDINGS="pinned"
-CPU_AFFINITIES="4 8"
+CPU_AFFINITIES="8"
 HASH_FUNC="toeplitz"
-DATAPATHS="tc_fwd_ct_offload"
-NUM_SESSIONS="500 1000" 
-BANDWIDTH_PER_SESSION=20m
+DATAPATHS="tc_fwd_ct_pp_offload"
+NUM_SESSIONS="20" 
+PP_RATE_PER_SESSION=10
+BANDWIDTH_PER_SESSION=${PP_RATE_PER_SESSION}m
+# 3 MTU sized packets
+PP_BUREST_SIZE=7570
 
 outline_all() {
 	CASE=0
@@ -59,7 +62,7 @@ outline_all() {
 						for n in $NUM_SESSIONS ; do
 							for h in $HASH_FUNC ; do
 								CASE=$((CASE+1))
-								echo case_${CASE} $m $bs $b $a $d $n $BANDWIDTH_PER_SESSION $h
+								echo case_${CASE} $m $bs $b $a $d $n $PP_RATE_PER_SESSION $BANDWIDTH_PER_SESSION $PP_BUREST_SIZE $h
 							done
 						done
 					done
@@ -93,7 +96,7 @@ iptables-save > $LOGDIR/working.iptables.rules.$$
 for CASE in $CASES ; do
 	args=`grep -w $CASE $LOGDIR/$RUNS`
 	#echo $args
-	bash rp_test.bash  $LOGDIR $args
+	bash -x rp_test.bash  $LOGDIR $args
 done
 iptables-restore < $LOGDIR/working.iptables.rules.$$
 rm $LOGDIR/working.iptables.rules.$$

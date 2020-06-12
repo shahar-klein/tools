@@ -71,8 +71,10 @@ cpu_binding=$5
 cpu_affinity=$6
 dp_profile=$7
 NUM_SESSIONS=$8
-BW_PER_SESSION=$9
-hfunc=${10}
+PP_RATE_PER_SESSION=$9
+BW_PER_SESSION=${10}
+PP_BURST_SIZE=${11}
+hfunc=${12}
 MULTI_IP=no
 
 #for logging
@@ -577,7 +579,7 @@ cleanup() {
 	# logCMD "ssh $LOADER ip route del $PUB_NET > /dev/null 2>&1"
 	# logCMD "ssh $INITIATOR ip route del $PRIV_NET > /dev/null 2>&1"
 
-	ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br
+	#ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br
 	flush_ip_dev localhost $RP_PRIV_LEG_DEV_BM > /dev/null 2>&1
 	flush_ip_dev localhost $RP_PUB_LEG_DEV_BM > /dev/null 2>&1
 
@@ -588,7 +590,7 @@ cleanup() {
 
 	#ovs
 	log "Clean OVS flows"
-	logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
+	#logCMD "ssh $RP ovs-vsctl list-br | xargs -r -l ovs-vsctl del-br"
 
 	logCMD "ssh $RP tc filter del dev $RP_PRIV_LEG_DEV parent ffff: > /dev/null 2>&1"
 	logCMD "ssh $RP tc filter del dev $RP_PUB_LEG_DEV parent ffff: > /dev/null 2>&1"
@@ -819,12 +821,15 @@ setup_buffer_size() {
 
 linux_forward_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
-	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
+	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l $PACKET_LEN -t $DURATION"
 }
 
 linux_forward_nat_setup() {
 	ssh $RP sysctl net.ipv4.ip_forward=1 >/dev/null 2>&1
+
+	logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV hw-tc-offload on"
+	logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
 
 	if [ $MULTI_IP = no ] ; then
 		nat_cmd="for i in {0..1000} ; do let dp=$GFN_PUB_PORT_START+\$i; let tdp=$GS_PORT_START+\$i ; iptables -t nat -A PREROUTING -i $RP_PUB_LEG_DEV -p udp -m udp --dport \$dp -j DNAT --to-destination ${LOADER_IP}:\$tdp ; done"
@@ -844,13 +849,13 @@ linux_forward_nat_setup() {
 
 	if [ $MULTI_IP = no ] ; then
 		#With Burst
-		#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION -r 60:140"
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION -r 60:140"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	else
 		
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	fi
 }
 
@@ -859,21 +864,52 @@ ovs_forward_setup() {
 
 	ssh $RP bash $TOOLS/set_ovs_cfg.bash ovs_forward_setup $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $LOADER_DEV_MAC $INITIATOR_DEV_MAC
 
-	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l 1000 -t $DURATION"
+	LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $INITIATOR_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${GFN_PUB_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+	INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $LOADER_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GS_PORT_START} -L :${GFN_PUB_PORT_START} -l $PACKET_LEN -t $DURATION"
 }
 
 ovs_forward_nat_setup() {
 
 	ssh $RP bash $TOOLS/set_ovs_cfg.bash ovs_forward_nat_setup $MULTI_IP $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $NUM_SESSIONS $GFN_PUB_PORT_START $GS_PORT_START $LOADER_DEV_MAC $INITIATOR_DEV_MAC $RP_PRIV_LEG_IP $RP_PUB_LEG_IP
-	#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-	#INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+	#INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	if [ $MULTI_IP = no ] ; then
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	else
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
+	fi
+
+}
+
+tc_forward_ct_pp_setup() {
+	offload=$1
+	pp_rate=$2
+	pp_burst=$3
+
+	if [ $offload = "yes" ]; then
+		logCMD "ssh $RP ethtool -K $RP_PRIV_LEG_DEV hw-tc-offload on"
+		logCMD "ssh $RP ethtool -K $RP_PUB_LEG_DEV hw-tc-offload on"
+		logCMD "ssh $RP echo $NUM_SESSIONS > /sys/class/net/$RP_PRIV_LEG_DEV/num_prio_hp"
+		logCMD "ssh $RP echo $pp_burst > /sys/class/net/$RP_PRIV_LEG_DEV/hp_pp_burst_size"
+		for (( c=0; c<$NUM_SESSIONS; c++ ))
+		do
+			logCMD "ssh $RP echo $pp_rate > /sys/class/net/$RP_PRIV_LEG_DEV/hp_queues/$c/rate"	
+		done
+	fi
+
+	# Remove need for $BRPRIV $BRPUB $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_POR
+	# set -x
+	ssh $RP bash $TOOLS/set_ovs_cfg.bash tc_ct_pp_setup $MULTI_IP $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $NUM_SESSIONS $GFN_PUB_PORT_START $GS_PORT_START $LOADER_DEV_MAC $INITIATOR_DEV_MAC $RP_PRIV_LEG_IP $RP_PUB_LEG_IP
+	# set +x
+
+	if [ $MULTI_IP = no ] ; then
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
+	else
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	fi
 
 }
@@ -892,11 +928,11 @@ tc_forward_ct_setup() {
 	# set +x
 
 	if [ $MULTI_IP = no ] ; then
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	else
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	fi
 
 }
@@ -905,15 +941,15 @@ ovs_forward_ct_setup() {
 
 	ssh $RP bash $TOOLS/set_ovs_cfg.bash ovs_forward_ct_setup $MULTI_IP $BRPRIV $BRPUB $RP_PRIV_LEG_DEV $RP_PUB_LEG_DEV $RP_PRIV_PATCH_PORT $RP_PUB_PATCH_PORT $RP_PRIV_LEG_MAC $RP_PUB_LEG_MAC $LOADER_IP $INITIATOR_IP $NUM_SESSIONS $GFN_PUB_PORT_START $GS_PORT_START $LOADER_DEV_MAC $INITIATOR_DEV_MAC $RP_PRIV_LEG_IP $RP_PUB_LEG_IP
 
-	#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-	#INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+	#LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+	#INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	if [ $MULTI_IP = no ] ; then
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L :${GS_PORT_START} -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R $NUM_SESSIONS  -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	else
 		
-		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l 1000 -t $DURATION"
-		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l 1000 -t $DURATION"
+		LOADER_CMD="ssh $LOADER /root/ws/git/gonoodle/gonoodle -u -c $RP_PRIV_LEG_IP --rp loader_multi -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 10 -b $BW_PER_SESSION -p ${RP_PORT_START} -L 5.5.50.0:47998 -l $PACKET_LEN -t $DURATION"
+		INITIATOR_CMD="ssh $INITIATOR /root/ws/git/gonoodle/gonoodle -u -c $RP_PUB_LEG_IP --rp initiator -C $NUM_SESSIONS -R  $NUM_SESSIONS -M 1 -b 1k -p ${GFN_PUB_PORT_START} -L :${RP_PORT_START} -l $PACKET_LEN -t $DURATION"
 	fi
 
 }
@@ -924,6 +960,8 @@ ovs_forward_ct_setup() {
 setup_dp_profile() {
 	nic_mode=$1
 	dp=$2
+	pp_rate=$3
+	pp_burst=$4
 	case $dp in 
 		linux_fwd)
 			linux_forward_setup
@@ -936,6 +974,9 @@ setup_dp_profile() {
 			;;
 		tc_fwd_ct_offload)
 			tc_forward_ct_setup "yes"
+			;;
+		tc_fwd_ct_pp_offload)
+			tc_forward_ct_pp_setup "yes" $pp_rate $pp_burst
 			;;
 		ovs_fwd)
 			setup_vm_ovs $nic_mode "no"
@@ -1101,7 +1142,7 @@ if [ $mode = "ha" ]; then
 	#set +x
 fi
 
-setup_dp_profile $mode $dp_profile
+setup_dp_profile $mode $dp_profile $PP_RATE_PER_SESSION $PP_BURST_SIZE
 sethfunc $hfunc
 echo "Running: $modeP, $profile, $cpu_binding CPU, $cpu_affinity, $dp_profile, hfunc $hfunc, $NUM_SESSIONS sessions at $BW_PER_SESSION bps"
 runTest
@@ -1112,169 +1153,3 @@ runMetrics $mode
 
 log_run $RPVM ${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${dp_profile}_${NUM_SESSIONS}_${BW_PER_SESSION} "After"
 exit
-
-if [ $DISPLAY_TESTS = "yes" ]
-then
-	echo "# DO NOT hand edit. This is generated by $0 with the DISPLAY_TESTS "
-	echo "# set in the config"
-	echo 
-fi
-
-# XXX Add a loop for number of sessions : 500, 1000
-# XXX Burst too.
-# XXX H/A
-
-
-
-
-disp_count=1 
-LOGDIR_HEAD=${LOGDIR}
-done_run=false
-# XXX For display and plot we need to get the test name from the number instead
-# of going over the loop just for that.
-for mode in $NIC_MODES
-do
-	LOGDIR=${LOGDIR_HEAD}/${mode}
-	# mkdir -p $LOGDIR
-	if [ $RUN_TESTS = "yes" ]
-	then
-		if [ $mode = "pt" ] ; then
-			RPVM=$RPVM_PT
-		elif [ $mode = "ct" ] ; then
-			RPVM=$RPVM_CT
-		else
-			RPVM=$RPVM_SRIOV
-		fi
-	else
-		echo 
-		echo "# NiC mode : $mode"
-		echo "------------------------------------------------------------------"
-	fi
-	for profile in $TEST_PROFILE
-	do
-		LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}
-		if [ $RUN_TESTS = "yes" ]
-		then
-			mkdir -p $LOGDIR
-			startup_vm $RPVM
-			cleanup $mode
-			log_run
-			setup_vm
-			# XXX mlnx_tune has some issues with 
-			# "AttributeError: 'NoneType' object has no attribute 'report_status'"
-			# when run in the SRIOV VM.
-			if [ $mode = "pt" ]
-			then
-				ssh $RP mlnx_tune -p $profile > $LOGDIR/mlnx_tune.log 2>&1
-			fi
-		else
-			echo
-		fi
-		for cpu_binding in $CPU_BINDINGS
-		do
-			LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}
-			if [ $RUN_TESTS = "yes" ]
-			then
-				#mkdir -p $LOGDIR
-				host_vm_cpu_binding $cpu_binding
-			fi
-			for  cpu_affinity in $CPU_AFFINITIES
-			do
-				LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}
-				if [ $RUN_TESTS = "yes" ]
-				then
-					#mkdir -p $LOGDIR
-					rp_irq_affinity $mode $cpu_affinity
-				fi
-				# echo "$mode, $profile, $cpu_binding, $cpu_affinity, $test"
-				for t in $TESTS
-				do
-					if [ $DISPLAY_TESTS = "yes" ]
-					then
-						echo "$disp_count: $mode, $profile, $cpu_binding, $cpu_affinity, $t"
-					elif [ $PLOT_RESULTS = "yes" ]
-					then
-						LOGDIR=${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
-						if [ $TEST_TO_PLOT != $disp_count ]
-						then
-							disp_count=$((disp_count+1))
-							continue
-						fi
-						# plotLogs $LOGDIR
-						done_run="true"
-						break
-					else
-						LOGDIR=${LOGDIR_HEAD}/${mode}_${profile}_${cpu_binding}_${cpu_affinity}_${t}
-						mkdir -p $LOGDIR
-						if [ -n "$TEST_TO_RUN" ]
-						then
-							if [ $TEST_TO_RUN != $disp_count ]
-							then
-								disp_count=$((disp_count+1))
-								continue
-							fi
-						fi
-						setup_tests $mode $t
-						#if [ $cpu_affinity = "8" ]
-						#then
-						#	echo "Quitting..."
-						#	exit
-						#fi
-						echo "Running test $disp_count, $mode, $profile, $cpu_binding CPU, $cpu_affinity, $t"
-						runTest
-						runMetrics $mode
-						cleanup $mode
-						if [ -n "$TEST_TO_RUN" ]
-						then
-							done_run="true"
-							break
-						fi
-					fi
-					disp_count=$((disp_count+1))
-				done
-				if [ $done_run = "true" ]
-				then
-					break
-				fi
-			done
-			if [ $done_run = "true" ]
-			then
-				break
-			fi
-		done
-		#if [ $RUN_TESTS = "yes" ]
-		#then
-		#	shutdown_vm $RPVM
-		#fi
-		if [ $done_run = "true" ]
-		then
-			break
-		fi
-	done
-	if [ $done_run = "true" ]
-	then
-		break
-	fi
-	if [ $RUN_TESTS = "yes" ]
-	then
-		# log_after
-		shutdown_vm $RPVM
-	fi
-done
-
-# Tar the log file
-if [ $RUN_TESTS = "yes" ]
-then
-	if [ "$(ls -A $LOGDIR_HEAD)" ]
-	then
-		echo "Tar'ing $LOGDIR_HEAD as $LOGDIR_HEAD.tar.gz"
-		tar -czf $LOGDIR_HEAD.tar.gz $LOGDIR_HEAD > /dev/null 2>&1
-	fi
-fi
-
-if [ $PLOT_RESULTS = "yes" ]
-then
-	# echo "Plotting $PLOT_DIR $LOGDIR $TEST_TO_PLOT"
-	plotLogs $PLOT_DIR $LOGDIR $TEST_TO_PLOT
-fi
-#log_run
