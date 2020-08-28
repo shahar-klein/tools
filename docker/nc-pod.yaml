@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ncpod
+  namespace: default
+spec:
+  containers:
+  - image: shaharklein/netcat:4
+    env:
+    command: ["bash"]
+    args: ["/run_nc.sh", "2","80","100","514","2001","3000","3101","3301","3389","5001","5900","6379","6399","8080","8001","9001"]
+    imagePullPolicy: Always
+    name: ncpod
+

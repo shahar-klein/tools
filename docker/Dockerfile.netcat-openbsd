@@ -1,0 +1,8 @@
+FROM debian:buster-slim
+
+RUN apt-get update \
+  && apt-get install -y netcat-openbsd procps vim iputils-ping net-tools\
+  && apt-get clean
+
+COPY run_nc.sh /
+
