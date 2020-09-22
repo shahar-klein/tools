@@ -7,7 +7,7 @@ listP=$@
 for p in $listP
 do
 	nc -kluvw 0 $p &
-	nc -lvnp $p &
+	nc -klvnp $p &
 done 
 
 wait
