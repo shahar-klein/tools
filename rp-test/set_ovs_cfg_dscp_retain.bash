@@ -140,7 +140,9 @@ tc_ct_pp_setup() {
 	else
 		GC_PORT=$GFN_PUB_PORT_START
 		GS_PORT=$GS_PORT_START
-		PRIORITY=0
+		PRIORITY=1
+		NO_PRIORITY=0
+		DSCP=1
 		# Chain 0, packet enters public side, start tracking in Zone 2
 		tc filter add dev ${RP_PUB_LEG_DEV} ingress prio 1 chain 0 proto ip flower ip_flags nofrag ip_proto udp ct_state -trk action ct zone 2 nat pipe action goto chain 2
 
@@ -154,8 +156,11 @@ tc_ct_pp_setup() {
 			# Chain 5, established flows proceed to forwarding
 			# tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower src_ip ${GS_IP} ip_flags nofrag ip_proto udp  action skbedit priority $PRIORITY action goto chain 6
 
+			PRIHEX=`printf '%x' $NO_PRIORITY`
+		 	tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_tos 4/0xfc ip_flags nofrag ip_proto udp src_port $GC_PORT ct_state +trk+est action skbedit priority $PRIHEX pipe action pedit ex munge ip dsfield set $((DSCP << 2)) retain 0x04 pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+
 			PRIHEX=`printf '%x' $PRIORITY`
-		 	tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_flags nofrag ip_proto udp src_port $GC_PORT ct_state +trk+est action skbedit priority $PRIHEX pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
+		 	tc filter add dev ${RP_PRIV_LEG_DEV} ingress prio 1 chain 5 proto ip flower ip_tos 0/0xfc ip_flags nofrag ip_proto udp src_port $GC_PORT ct_state +trk+est action skbedit priority $PRIHEX pipe action pedit ex munge ip dsfield set $((DSCP << 2)) retain 0x04 pipe action pedit ex munge ip ttl add 255 pipe action pedit ex munge eth src set ${RP_PUB_LEG_MAC} munge eth dst set ${INITIATOR_DEV_MAC} pipe action csum iph and udp pipe action mirred egress redirect dev ${RP_PUB_LEG_DEV}
 
 			GC_PORT=$((GC_PORT+1))
 			GS_PORT=$((GS_PORT+1))
