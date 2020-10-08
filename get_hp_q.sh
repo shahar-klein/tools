@@ -66,12 +66,12 @@ if [ $? != 0 ] ; then
 
 
 	if [[ $ONLY_HW = yes ]] ; then
-		awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_hw_q%d_pkts:  %.0f\n", "0x" $1, $4, "0x" $1, $5}' /tmp/CL
+		awk 'NF {printf "hp_hw_q%d_bytes: %.0f\n", "0x" $1, $4}' /tmp/CL
 		exit 0
 	fi
 
 	if [[ $ONLY_HW = no ]] ; then
-		awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_hw_q%d_pkts:  %.0f\nhp_sw_q%d_bytes: %.0f\nhp_sw_q%d_pkts:  %.0f\n", "0x" $1, $4, "0x" $1, $5, "0x" $1, $2, "0x" $1, $3}' /tmp/CL
+		awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_sw_q%d_bytes: %.0f\n", "0x" $1, $4, "0x" $1, $2}' /tmp/CL
 		exit 0
 	fi
 	exit 0
@@ -87,12 +87,12 @@ if [[ $map = yes ]] ; then
 fi
 
 if [[ $ONLY_HW = yes ]] ; then
-	awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_hw_q%d_pkts:  %.0f\n", "0x" $2, $5, "0x" $2, $6}' /tmp/CL
+	awk 'NF {printf "hp_hw_q%d_bytes: %.0f\n", "0x" $2, $5}' /tmp/CL
 	exit 0
 fi
 
 if [[ $ONLY_HW = no ]] ; then
-	awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_hw_q%d_pkts:  %.0f\nhp_sw_q%d_bytes: %.0f\nhp_sw_q%d_pkts:  %.0f\n", "0x" $2, $5, "0x" $2, $6, "0x" $2, $3, "0x" $2, $4}' /tmp/CL
+	awk 'NF {printf "hp_hw_q%d_bytes: %.0f\nhp_sw_q%d_bytes: %.0f\n", "0x" $2, $5, "0x" $2, $3}' /tmp/CL
 	exit 0
 fi
 
