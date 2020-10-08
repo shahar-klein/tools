@@ -47,7 +47,7 @@ if [ -z $dev ] ; then
 	Usage 2
 fi
 
-tc -s filter show dev $dev root | grep -q priority
+tc -s filter show dev enp8s0 root | grep -q priority
 if [ $? != 0 ] ; then
 	if [[ $ONLY_HW = no ]] ; then
 		tc -s filter show dev $dev root | grep -A5 mirred | egrep "software|hardware" | tr '\r\n' ' ' | awk '{printf "hp_hw_q0_bytes: %.0f\nhp_hw_q0_pkts:  %.0f\nhp_sw_q0_bytes: %.0f\nhp_sw_q0_pkts:  %.0f\n", $9, $11, $3, $5}'
@@ -76,7 +76,6 @@ if [ $? != 0 ] ; then
 	fi
 	exit 0
 fi
-
 
 #port | queue(hex) | sw bytes | sw pkts | hw bytes | hw pkts
 tc -s filter show dev $dev root | egrep -A 6 'filter protocol ip.*handle|priority|src_port|mirred' | egrep 'filter protocol ip.*handle|Sent software|Sent hardware|priority|src_port' | sed 's|bytes||; s|pkt||; s|src_port||; /filter protocol/c\aaa' | tr -s ' ' | sed 's|none|:0| ; s|action order 1: skbedit priority :|| ; s|pipe||; s|Sent software||; s|Sent hardware||' | tr '\r\n' ' ' | sed 's|aaa|\n|g' | tr -s  ' ' > /tmp/CL
