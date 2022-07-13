@@ -1,0 +1,5 @@
+Meta: k8s join
+Issue:
+/proc/sys/net/bridge/bridge-nf-call-iptables does not exist
+Solution:
+modprobe br_netfilter
