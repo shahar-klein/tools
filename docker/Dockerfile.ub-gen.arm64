@@ -1,0 +1,6 @@
+FROM ubuntu:20.04
+
+RUN apt-get update
+RUN apt-get install -y net-tools unbound ethtool tcpdump nginx dnsutils bash curl iproute2 ca-certificates iproute2 iperf iperf3 netcat nmap iftop curl iputils-ping dnsutils python3 wget bash strace  vim bash nginx
+
+RUN apt-get update
