@@ -7,6 +7,8 @@
 # it is set; the liveliness probe can take care of checking
 # if it is configured correctly.
 
+echo "I am setup-tcp-xdp.sh[$0] PID: $$ at `date`" > /root/setup-tcp-xdp_call.$$
+
 ip netns list | grep -q 'xdp_ns' && { echo "XDP already configured exist"; exit 0; }
 
 echo "Configuring TCP XDP pre-reqs"
