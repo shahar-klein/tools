@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 LABEL maintaner="Shahar Klein"
-LABEL Docrfile="Dockerfile.ub-gen-ovs.arm64" 
+LABEL Dockerfile="Dockerfile.ub-gen-ovs.arm64" 
 
 COPY Dockerfile.ub-gen-ovs.arm64 /
 COPY checkxdp.sh /root/checkxdp.sh
