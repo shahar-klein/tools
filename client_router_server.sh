@@ -42,9 +42,6 @@
 
 
 
-
-
-
 #!/bin/bash
 
 set -x
@@ -87,8 +84,8 @@ ip link set $SNS_L_SIDE netns $SNS
 ip link set $SNS_R_SIDE netns $RNS
 
 ip netns exec $CNS ip add add 20.20.20.20/24 dev $CNS_L_SIDE
-ip netns exec $RNS ip add add 20.20.20.1/24 dev $CNS_R_SIDE
 ip netns exec $SNS ip add add 30.30.30.30/24 dev $SNS_L_SIDE
+ip netns exec $RNS ip add add 20.20.20.1/24 dev $CNS_R_SIDE
 ip netns exec $RNS ip add add 30.30.30.1/24 dev $SNS_R_SIDE
 
 
@@ -102,16 +99,15 @@ sleep 3
 ip netns exec $CNS ip route add 30.30.30.0/24 via 20.20.20.1 dev $CNS_L_SIDE
 ip netns exec $SNS ip route add 20.20.20.0/24 via 30.30.30.1 dev $SNS_L_SIDE
 
-
+# Problem 2 on the router
 ip netns exec $RNS sysctl -w net.ipv4.conf.all.forwarding=0
 
-#on the router
+# Problem 2 on the server
 ip netns exec $SNS iptables -A INPUT -p icmp -j DROP
 
-ip netns exec $RNS ip link set lo up
-ip netns exec $RNS ip route del 20.20.20.0/24
-ip netns exec $RNS ip route add 20.20.0.0/16 dev cns_R_side
-ip netns exec $RNS ip route add 20.20.20.0/24 dev lo
+# Problem 3. routing loop on the router
+ip netns exec $RNS ip link set dev lo up
+ip netns exec $RNS ip route add 30.30.30.0/25 dev lo
 
 
 
