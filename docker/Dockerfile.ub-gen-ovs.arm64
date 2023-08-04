@@ -1,23 +1,8 @@
 FROM ubuntu:20.04
 
 LABEL maintaner="Shahar Klein"
-LABEL Dockerfile="Dockerfile.ub-gen-ovs.arm64" 
+LABEL Dockerfile="Dockerfile.ovs-builder.ubuntu-20-amd64" 
 
-COPY Dockerfile.ub-gen-ovs.arm64 /
-COPY checkxdp.sh /root/checkxdp.sh
-COPY setup-tcp-xdp.sh /root/setup-tcp-xdp.sh
+RUN apt-get update && apt-get install -y build-essential
 
-RUN apt-get update && apt-get install -y arping firewalld iproute2 curl \
-    iputils-ping software-properties-common util-linux apt-transport-https net-tools
-
-RUN \
-echo "deb [trusted=yes] https://sdn_ro:AKCp8jQwj6F1ZZZ8QuN26n3bVcvgYRHEns5aQZDeNsi3PE2f6nQ3YJpEYgxGqbhYcpyCU6bHy@edge.urm.nvidia.com/artifactory/sw-ngn-sdn-debian focal main" | tee -a /etc/apt/sources.list.d/ngn-sdn-ovn.list &&\
-apt-get update && apt-get install -y libopenvswitch=2.17.1.58404de5.dc9f43b8-1 openvswitch-switch=2.17.1.58404de5.dc9f43b8-1 openvswitch-common=2.17.1.58404de5.dc9f43b8-1  
-
-RUN apt-get install -y net-tools unbound ethtool tcpdump nginx dnsutils bash curl iproute2 ca-certificates iproute2 iperf iperf3 netcat nmap iftop curl iputils-ping dnsutils python3 wget bash strace  vim bash nginx
-RUN apt-get update
-
-COPY entrypoint.sh /
-
-ENTRYPOINT ["/entrypoint.sh"]
 

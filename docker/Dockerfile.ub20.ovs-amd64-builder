@@ -1,0 +1,10 @@
+FROM ubuntu:20.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+LABEL maintaner="Shahar Klein"
+LABEL Dockerfile="Dockerfile.ovs-builder.ubuntu-20-amd64"
+
+RUN apt-get update && apt-get install -y build-essential vim autoconf libtool libtool-bin libjemalloc-dev python3 debhelper dh-python python3-sphinx libssl-dev python3-setuptools
+
+
