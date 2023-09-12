@@ -6,9 +6,9 @@ RUN dnf install -y docker-ce-cli
 
 RUN yum install -y wget
 
-RUN wget https://go.dev/dl/go1.17.8.linux-amd64.tar.gz
+RUN wget https://go.dev/dl/go1.18.1.linux-amd64.tar.gz
 
-RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.17.8.linux-amd64.tar.gz
+RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.18.1.linux-amd64.tar.gz
 
 RUN yum install -y git make curl findutils
 
