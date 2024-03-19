@@ -1,0 +1,13 @@
+FROM ubuntu:20.04
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y build-essential && apt-get install -y debhelper apt-utils build-essential fakeroot dpkg-dev devscripts equivs wget curl vim autoconf libtool libtool-bin libjemalloc-dev python3 debhelper dh-python python3-sphinx libssl-dev python3-setuptools dh-exec
+
+RUN curl -fsSL https://get.docker.com | sh
+COPY go1.21.5.linux-arm64.tar.gz /
+RUN rm -rf /usr/local/go && tar -C /usr/local -xzf go1.21.5.linux-arm64.tar.gz
+# Add /usr/local/go/bin to the PATH
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+COPY yq /usr/local/bin/
+COPY Dockerfile.ubuntu.arm64.builder-focal /Dockerfile
